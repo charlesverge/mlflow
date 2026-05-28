@@ -131,6 +131,30 @@ def test_build_endpoint_config_allows_provider_when_no_filter():
     assert config.name == "test-ep"
 
 
+def test_set_gateway_telemetry_state_stages_trace_headers():
+    mock_request = create_mock_request()
+    mock_request.headers = {
+        "X-Mlflow-Session-Id": "session-123",
+        "X-Mlflow-Run-Id": "run-456",
+        "X-Mlflow-Experiment-Id": "exp-789",
+        "X-Mlflow-Model-Id": "model-abc",
+    }
+    endpoint_config = GatewayEndpointConfig(
+        endpoint_id="test-endpoint-id",
+        endpoint_name="test-endpoint",
+        experiment_id="exp-000",
+        usage_tracking=True,
+        models=[_make_model_config()],
+    )
+
+    _set_gateway_telemetry_state(mock_request, endpoint_config)
+
+    assert mock_request.state.mlflow_session_id == "session-123"
+    assert mock_request.state.mlflow_run_id == "run-456"
+    assert mock_request.state.mlflow_experiment_id == "exp-789"
+    assert mock_request.state.mlflow_model_id == "model-abc"
+
+
 def test_create_provider_from_endpoint_name_openai(store: SqlAlchemyStore):
     # Create test data
     secret = store.create_gateway_secret(

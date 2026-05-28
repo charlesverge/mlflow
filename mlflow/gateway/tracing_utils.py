@@ -187,6 +187,8 @@ def maybe_traced_gateway_call(
     request_type: GatewayRequestType | None = None,
     on_complete: Callable[[], None] | None = None,
     message_format: str | None = None,
+    session_id: str | None = None,
+    experiment_id: str | None = None,
 ) -> Callable[..., Any]:
     """
     Wrap a gateway function with tracing.
@@ -218,11 +220,16 @@ def maybe_traced_gateway_call(
     if message_format:
         span_attributes[SpanAttributeKey.MESSAGE_FORMAT] = message_format
 
+    resolved_experiment_id = (
+        experiment_id if experiment_id is not None else endpoint_config.experiment_id
+    )
+    assert resolved_experiment_id is not None
+    resolved_destination = MlflowExperimentLocation(experiment_id=resolved_experiment_id)
     trace_kwargs = {
         "name": _gateway_span_name(endpoint_config),
         "attributes": span_attributes,
         "output_reducer": output_reducer,
-        "trace_destination": MlflowExperimentLocation(endpoint_config.experiment_id),
+        "trace_destination": resolved_destination,
     }
 
     # Build combined metadata with gateway-specific fields
@@ -233,12 +240,11 @@ def maybe_traced_gateway_call(
     if caller := _extract_caller(request_headers):
         combined_metadata[TraceMetadataKey.GATEWAY_CALLER] = caller
 
-    # Wrap function to set metadata inside the trace context
     if inspect.isasyncgenfunction(func):
 
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            mlflow.update_current_trace(metadata=combined_metadata)
+            mlflow.update_current_trace(session_id=session_id, metadata=combined_metadata)
             _maybe_unwrap_single_arg_input(args, kwargs)
             try:
                 async for item in func(*args, **kwargs):
@@ -251,11 +257,25 @@ def maybe_traced_gateway_call(
                         _logger.debug("on_complete callback failed", exc_info=True)
                 _maybe_create_distributed_span(request_headers, endpoint_config)
 
+        traced_wrapper = mlflow.trace(wrapper, **trace_kwargs)
+
+        @functools.wraps(traced_wrapper)
+        async def outer(*args, **kwargs):
+            mlflow.tracing.set_destination(resolved_destination, context_local=True)
+            try:
+                with mlflow.tracing.context(session_id=session_id, metadata=combined_metadata):
+                    async for item in traced_wrapper(*args, **kwargs):
+                        yield item
+            finally:
+                mlflow.tracing.reset()
+
+        return outer
+
     elif inspect.iscoroutinefunction(func):
 
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            mlflow.update_current_trace(metadata=combined_metadata)
+            mlflow.update_current_trace(session_id=session_id, metadata=combined_metadata)
             _maybe_unwrap_single_arg_input(args, kwargs)
             try:
                 result = await func(*args, **kwargs)
@@ -268,11 +288,24 @@ def maybe_traced_gateway_call(
                 _maybe_create_distributed_span(request_headers, endpoint_config)
             return result
 
+        traced_wrapper = mlflow.trace(wrapper, **trace_kwargs)
+
+        @functools.wraps(traced_wrapper)
+        async def outer(*args, **kwargs):
+            mlflow.tracing.set_destination(resolved_destination, context_local=True)
+            try:
+                with mlflow.tracing.context(session_id=session_id, metadata=combined_metadata):
+                    return await traced_wrapper(*args, **kwargs)
+            finally:
+                mlflow.tracing.reset()
+
+        return outer
+
     else:
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            mlflow.update_current_trace(metadata=combined_metadata)
+            mlflow.update_current_trace(session_id=session_id, metadata=combined_metadata)
             _maybe_unwrap_single_arg_input(args, kwargs)
             try:
                 result = func(*args, **kwargs)
@@ -285,7 +318,18 @@ def maybe_traced_gateway_call(
                 _maybe_create_distributed_span(request_headers, endpoint_config)
             return result
 
-    return mlflow.trace(wrapper, **trace_kwargs)
+        traced_wrapper = mlflow.trace(wrapper, **trace_kwargs)
+
+        @functools.wraps(traced_wrapper)
+        def outer(*args, **kwargs):
+            mlflow.tracing.set_destination(resolved_destination, context_local=True)
+            try:
+                with mlflow.tracing.context(session_id=session_id, metadata=combined_metadata):
+                    return traced_wrapper(*args, **kwargs)
+            finally:
+                mlflow.tracing.reset()
+
+        return outer
 
 
 def aggregate_chat_stream_chunks(chunks: list[StreamResponsePayload]) -> dict[str, Any] | None:

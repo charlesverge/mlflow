@@ -137,6 +137,27 @@ def _get_user_metadata(request: Request) -> dict[str, Any]:
     return metadata
 
 
+def _get_optional_header(request: Request, header_name: str) -> str | None:
+    value = request.headers.get(header_name)
+    if value is None:
+        return None
+    stripped_value = value.strip()
+    return stripped_value if stripped_value else None
+
+
+def _get_gateway_trace_context(request: Request) -> tuple[dict[str, Any], str | None, str | None]:
+    metadata = _get_user_metadata(request)
+    if run_id := getattr(request.state, "mlflow_run_id", None):
+        metadata[TraceMetadataKey.SOURCE_RUN] = run_id
+    if model_id := getattr(request.state, "mlflow_model_id", None):
+        metadata[TraceMetadataKey.MODEL_ID] = model_id
+    return (
+        metadata,
+        getattr(request.state, "mlflow_session_id", None),
+        getattr(request.state, "mlflow_experiment_id", None),
+    )
+
+
 def _record_gateway_invocation(invocation_type: GatewayInvocationType) -> Callable[..., Any]:
     """
     Decorator for gateway invocation endpoints that records telemetry:
@@ -225,7 +246,7 @@ def _record_gateway_invocation(invocation_type: GatewayInvocationType) -> Callab
 
 
 def _set_gateway_telemetry_state(request: Request, endpoint_config) -> None:
-    """Set endpoint_id and provider on request.state for telemetry attribution."""
+    """Set endpoint and request-scoped tracing state on request.state."""
     request.state.endpoint_id = endpoint_config.endpoint_id
     if endpoint_config.models:
         primary_model = next(
@@ -237,6 +258,11 @@ def _set_gateway_telemetry_state(request: Request, endpoint_config) -> None:
             endpoint_config.models[0],
         )
         request.state.provider = str(primary_model.provider)
+
+    request.state.mlflow_session_id = _get_optional_header(request, "X-Mlflow-Session-Id")
+    request.state.mlflow_run_id = _get_optional_header(request, "X-Mlflow-Run-Id")
+    request.state.mlflow_experiment_id = _get_optional_header(request, "X-Mlflow-Experiment-Id")
+    request.state.mlflow_model_id = _get_optional_header(request, "X-Mlflow-Model-Id")
 
 
 def _build_openai_compatible_config(model_config: "GatewayModelConfig"):
@@ -609,7 +635,7 @@ async def invocations(endpoint_name: str, request: Request):
     - If payload has "input" field -> embeddings endpoint
     """
     body = await _get_request_body(request)
-    user_metadata = _get_user_metadata(request)
+    user_metadata, session_id, experiment_id = _get_gateway_trace_context(request)
     headers = dict(request.headers)
 
     store = _get_store()
@@ -655,6 +681,8 @@ async def invocations(endpoint_name: str, request: Request):
                 _guarded_stream,
                 endpoint_config,
                 user_metadata,
+                session_id=session_id,
+                experiment_id=experiment_id,
                 output_reducer=aggregate_chat_stream_chunks,
                 request_headers=headers,
                 request_type=GatewayRequestType.UNIFIED_CHAT,
@@ -691,6 +719,8 @@ async def invocations(endpoint_name: str, request: Request):
                     _guarded_chat,
                     endpoint_config,
                     user_metadata,
+                session_id=session_id,
+                experiment_id=experiment_id,
                     request_headers=headers,
                     request_type=GatewayRequestType.UNIFIED_CHAT,
                     on_complete=make_budget_on_complete(store, workspace),
@@ -714,6 +744,8 @@ async def invocations(endpoint_name: str, request: Request):
             provider.embeddings,
             endpoint_config,
             user_metadata,
+                session_id=session_id,
+                experiment_id=experiment_id,
             request_headers=headers,
             request_type=GatewayRequestType.UNIFIED_EMBEDDINGS,
             on_complete=make_budget_on_complete(store, workspace),
@@ -745,7 +777,7 @@ async def chat_completions(request: Request):
         }
     """
     body = await _get_request_body(request)
-    user_metadata = _get_user_metadata(request)
+    user_metadata, session_id, experiment_id = _get_gateway_trace_context(request)
     headers = dict(request.headers)
 
     # Extract endpoint name from "model" parameter
@@ -789,6 +821,8 @@ async def chat_completions(request: Request):
             _guarded_stream,
             endpoint_config,
             user_metadata,
+                session_id=session_id,
+                experiment_id=experiment_id,
             output_reducer=aggregate_chat_stream_chunks,
             request_headers=headers,
             request_type=GatewayRequestType.UNIFIED_CHAT,
@@ -825,6 +859,8 @@ async def chat_completions(request: Request):
                 _guarded_chat,
                 endpoint_config,
                 user_metadata,
+                session_id=session_id,
+                experiment_id=experiment_id,
                 request_headers=headers,
                 request_type=GatewayRequestType.UNIFIED_CHAT,
                 on_complete=make_budget_on_complete(store, workspace),
@@ -856,7 +892,7 @@ async def openai_passthrough_chat(request: Request):
         }
     """
     body = await _get_request_body(request)
-    user_metadata = _get_user_metadata(request)
+    user_metadata, session_id, experiment_id = _get_gateway_trace_context(request)
 
     endpoint_name = _extract_endpoint_name_from_model(body)
     body.pop("model")
@@ -890,6 +926,8 @@ async def openai_passthrough_chat(request: Request):
             _guarded_stream,
             endpoint_config,
             user_metadata,
+                session_id=session_id,
+                experiment_id=experiment_id,
             request_headers=headers,
             request_type=GatewayRequestType.PASSTHROUGH_MODEL_OPENAI_CHAT,
             on_complete=make_budget_on_complete(store, workspace),
@@ -921,6 +959,8 @@ async def openai_passthrough_chat(request: Request):
             _guarded_passthrough,
             endpoint_config,
             user_metadata,
+                session_id=session_id,
+                experiment_id=experiment_id,
             request_headers=headers,
             request_type=GatewayRequestType.PASSTHROUGH_MODEL_OPENAI_CHAT,
             on_complete=make_budget_on_complete(store, workspace),
@@ -948,7 +988,7 @@ async def openai_passthrough_embeddings(request: Request):
         }
     """
     body = await _get_request_body(request)
-    user_metadata = _get_user_metadata(request)
+    user_metadata, session_id, experiment_id = _get_gateway_trace_context(request)
 
     endpoint_name = _extract_endpoint_name_from_model(body)
     body.pop("model")
@@ -977,6 +1017,8 @@ async def openai_passthrough_embeddings(request: Request):
         provider.passthrough,
         endpoint_config,
         user_metadata,
+        session_id=session_id,
+        experiment_id=experiment_id,
         request_headers=headers,
         request_type=GatewayRequestType.PASSTHROUGH_MODEL_OPENAI_EMBEDDINGS,
         on_complete=make_budget_on_complete(store, workspace),
@@ -1006,7 +1048,7 @@ async def _openai_responses_passthrough_unary(
     ``stream=true`` when their endpoint doesn't support streaming, as
     ``/responses/compact`` does).
     """
-    user_metadata = _get_user_metadata(request)
+    user_metadata, session_id, experiment_id = _get_gateway_trace_context(request)
     endpoint_name = _extract_endpoint_name_from_model(body)
     body.pop("model")
     store = _get_store()
@@ -1041,6 +1083,8 @@ async def _openai_responses_passthrough_unary(
             _guarded_passthrough,
             endpoint_config,
             user_metadata,
+                session_id=session_id,
+                experiment_id=experiment_id,
             request_headers=headers,
             request_type=request_type,
             on_complete=make_budget_on_complete(store, workspace),
@@ -1077,7 +1121,7 @@ async def openai_passthrough_responses(request: Request):
         # Post-LLM guardrails are not applied to streaming responses. Streaming
         # keeps its own inline setup because the closure below captures these
         # variables directly; the unary path delegates to the shared helper.
-        user_metadata = _get_user_metadata(request)
+        user_metadata, session_id, experiment_id = _get_gateway_trace_context(request)
         endpoint_name = _extract_endpoint_name_from_model(body)
         body.pop("model")
         store = _get_store()
@@ -1108,6 +1152,8 @@ async def openai_passthrough_responses(request: Request):
             _guarded_stream,
             endpoint_config,
             user_metadata,
+                session_id=session_id,
+                experiment_id=experiment_id,
             output_reducer=aggregate_openai_responses_stream_chunks,
             request_headers=headers,
             request_type=GatewayRequestType.PASSTHROUGH_MODEL_OPENAI_RESPONSES,
@@ -1192,7 +1238,7 @@ async def anthropic_passthrough_messages(request: Request):
         }
     """
     body = await _get_request_body(request)
-    user_metadata = _get_user_metadata(request)
+    user_metadata, session_id, experiment_id = _get_gateway_trace_context(request)
 
     endpoint_name = _extract_endpoint_name_from_model(body)
     body.pop("model")
@@ -1226,6 +1272,8 @@ async def anthropic_passthrough_messages(request: Request):
             _guarded_stream,
             endpoint_config,
             user_metadata,
+                session_id=session_id,
+                experiment_id=experiment_id,
             output_reducer=aggregate_anthropic_messages_stream_chunks,
             request_headers=headers,
             request_type=GatewayRequestType.PASSTHROUGH_MODEL_ANTHROPIC_MESSAGES,
@@ -1259,6 +1307,8 @@ async def anthropic_passthrough_messages(request: Request):
             _guarded_passthrough,
             endpoint_config,
             user_metadata,
+                session_id=session_id,
+                experiment_id=experiment_id,
             request_headers=headers,
             request_type=GatewayRequestType.PASSTHROUGH_MODEL_ANTHROPIC_MESSAGES,
             on_complete=make_budget_on_complete(store, workspace),
@@ -1293,7 +1343,7 @@ async def gemini_passthrough_generate_content(endpoint_name: str, request: Reque
         }
     """
     body = await _get_request_body(request)
-    user_metadata = _get_user_metadata(request)
+    user_metadata, session_id, experiment_id = _get_gateway_trace_context(request)
 
     store = _get_store()
     workspace = get_request_workspace()
@@ -1329,6 +1379,8 @@ async def gemini_passthrough_generate_content(endpoint_name: str, request: Reque
             _guarded_passthrough,
             endpoint_config,
             user_metadata,
+                session_id=session_id,
+                experiment_id=experiment_id,
             request_headers=headers,
             request_type=GatewayRequestType.PASSTHROUGH_MODEL_GEMINI_GENERATE_CONTENT,
             on_complete=make_budget_on_complete(store, workspace),
@@ -1363,7 +1415,7 @@ async def gemini_passthrough_stream_generate_content(endpoint_name: str, request
         }
     """
     body = await _get_request_body(request)
-    user_metadata = _get_user_metadata(request)
+    user_metadata, session_id, experiment_id = _get_gateway_trace_context(request)
 
     store = _get_store()
     workspace = get_request_workspace()
@@ -1396,6 +1448,8 @@ async def gemini_passthrough_stream_generate_content(endpoint_name: str, request
         _guarded_stream,
         endpoint_config,
         user_metadata,
+        session_id=session_id,
+        experiment_id=experiment_id,
         output_reducer=aggregate_gemini_stream_generate_content_chunks,
         request_headers=headers,
         request_type=GatewayRequestType.PASSTHROUGH_MODEL_GEMINI_GENERATE_CONTENT,
@@ -1432,7 +1486,7 @@ async def raw_proxy(endpoint_name: str, path: str, request: Request):
         }
     """
     body = await _get_request_body(request)
-    user_metadata = _get_user_metadata(request)
+    user_metadata, session_id, experiment_id = _get_gateway_trace_context(request)
     store = _get_store()
     workspace = get_request_workspace()
     _validate_store(store)
@@ -1490,6 +1544,8 @@ async def raw_proxy(endpoint_name: str, path: str, request: Request):
         _do_proxy,
         endpoint_config,
         user_metadata,
+        session_id=session_id,
+        experiment_id=experiment_id,
         request_headers=headers,
         request_type=GatewayRequestType.RAW_PROXY,
         on_complete=make_budget_on_complete(store, workspace),

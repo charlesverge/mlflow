@@ -1,5 +1,6 @@
 import asyncio
 import json
+import uuid
 from typing import Any
 
 import pytest
@@ -219,6 +220,34 @@ async def test_maybe_traced_gateway_call_basic(endpoint_config):
     # No user metadata should be present in trace
     assert trace.info.request_metadata.get(TraceMetadataKey.AUTH_USERNAME) is None
     assert trace.info.request_metadata.get(TraceMetadataKey.AUTH_USER_ID) is None
+
+
+@pytest.mark.asyncio
+async def test_maybe_traced_gateway_call_request_headers_propagate_session_and_experiment(
+    endpoint_config,
+):
+    experiment_id = mlflow.create_experiment(f"gateway-test-{uuid.uuid4().hex}")
+    traced_func = maybe_traced_gateway_call(
+        mock_async_func,
+        endpoint_config,
+        metadata={
+            TraceMetadataKey.SOURCE_RUN: "run-456",
+            TraceMetadataKey.MODEL_ID: "model-abc",
+        },
+        session_id="session-123",
+        experiment_id=experiment_id,
+    )
+    result = await traced_func({"input": "test"})
+
+    assert result == {"result": "success", "payload": {"input": "test"}}
+
+    gateway_traces = TracingClient().search_traces(locations=[experiment_id])
+    assert len(gateway_traces) == 1
+    trace = gateway_traces[0]
+
+    assert trace.info.request_metadata.get(TraceMetadataKey.TRACE_SESSION) == "session-123"
+    assert trace.info.request_metadata.get(TraceMetadataKey.SOURCE_RUN) == "run-456"
+    assert trace.info.request_metadata.get(TraceMetadataKey.MODEL_ID) == "model-abc"
 
 
 @pytest.mark.asyncio
