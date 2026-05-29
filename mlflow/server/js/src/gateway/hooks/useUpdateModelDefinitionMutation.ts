@@ -4,12 +4,19 @@ import { GatewayApi } from '../api';
 export const useUpdateModelDefinitionMutation = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { modelDefinitionId: string; secretId?: string; provider?: string; modelName?: string }) =>
+    mutationFn: (data: {
+      modelDefinitionId: string;
+      secretId?: string;
+      provider?: string;
+      modelName?: string;
+      serviceTier?: string;
+    }) =>
       GatewayApi.updateModelDefinition({
         model_definition_id: data.modelDefinitionId,
         secret_id: data.secretId,
         provider: data.provider,
         model_name: data.modelName,
+        service_tier: data.serviceTier,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries(['gateway_endpoints']);

@@ -17,6 +17,7 @@ const makeModel = (overrides: Partial<TrafficSplitModel> = {}): TrafficSplitMode
   modelDefinitionName: '',
   provider: 'openai',
   modelName: 'gpt-4',
+  serviceTier: '',
   secretMode: 'new',
   existingSecretId: '',
   newSecret: { name: '', authMode: '', secretFields: {}, configFields: {} },
@@ -46,6 +47,7 @@ describe('TrafficSplitConfigurator', () => {
     expect(newModels).toHaveLength(1);
     expect(newModels[0].weight).toBe(0);
     expect(newModels[0].provider).toBe('');
+    expect(newModels[0].serviceTier).toBe('');
   });
 
   it('renders model items for each model in value', () => {

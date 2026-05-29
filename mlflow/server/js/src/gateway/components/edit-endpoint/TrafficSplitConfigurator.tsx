@@ -24,6 +24,7 @@ export const TrafficSplitConfigurator = ({
         modelDefinitionName: '',
         provider: '',
         modelName: '',
+        serviceTier: '',
         secretMode: 'new' as const,
         existingSecretId: '',
         newSecret: {

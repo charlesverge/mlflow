@@ -3,13 +3,15 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   FormUI,
+  Radio,
+  type RadioChangeEvent,
   Tooltip,
   Typography,
   useDesignSystemTheme,
   TrashIcon,
 } from '@databricks/design-system';
 import { FormattedMessage, useIntl } from 'react-intl';
-import { useState, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { GatewayInput } from '../common';
 import type { TrafficSplitModel } from '../../hooks/useEditEndpointForm';
 import { ProviderSelect } from '../create-endpoint/ProviderSelect';
@@ -27,6 +29,31 @@ interface TrafficSplitModelItemProps {
   onRemove: (index: number) => void;
   componentId: string;
 }
+
+const BEDROCK_SERVICE_TIER_OPTIONS = [
+  {
+    value: 'auto',
+    description:
+      'The default behavior. The system automatically uses specialized tier credits (like Scale Tier) if available.',
+  },
+  {
+    value: 'default',
+    description:
+      'Forces the request to be processed in the standard, shared public cluster using standard pay-as-you-go pricing.',
+  },
+  {
+    value: 'priority',
+    description: 'Routes traffic to Priority Processing for lower latency, billed at a premium rate per token.',
+  },
+  {
+    value: 'flex',
+    description:
+      'Routes traffic to Flex Processing for a significant cost reduction in exchange for higher latency and lower availability.',
+  },
+] as const;
+
+type BedrockServiceTierOption = (typeof BEDROCK_SERVICE_TIER_OPTIONS)[number]['value'];
+type BedrockServiceTierSelection = BedrockServiceTierOption | 'custom';
 
 export const TrafficSplitModelItem = ({
   model,
@@ -55,11 +82,26 @@ export const TrafficSplitModelItem = ({
     newSecret: model.newSecret,
   };
 
+  const serviceTierSelection = useMemo<BedrockServiceTierSelection | undefined>(() => {
+    if (!model.serviceTier) {
+      return undefined;
+    }
+
+    return BEDROCK_SERVICE_TIER_OPTIONS.some(({ value }) => value === model.serviceTier) ? model.serviceTier : 'custom';
+  }, [model.serviceTier]);
+
   const handleApiKeyChange = (config: ApiKeyConfiguration) => {
     onModelChange(index, {
       secretMode: config.mode,
       existingSecretId: config.existingSecretId,
       newSecret: config.newSecret,
+    });
+  };
+
+  const handleServiceTierChange = (event: RadioChangeEvent) => {
+    const value = event.target.value as BedrockServiceTierSelection;
+    onModelChange(index, {
+      serviceTier: value === 'custom' ? (serviceTierSelection === 'custom' ? model.serviceTier : '') : value,
     });
   };
 
@@ -120,6 +162,7 @@ export const TrafficSplitModelItem = ({
               onModelChange(index, {
                 provider,
                 modelName: '',
+                serviceTier: '',
                 secretMode: 'new',
                 existingSecretId: '',
                 newSecret: {
@@ -139,6 +182,87 @@ export const TrafficSplitModelItem = ({
             onChange={(modelName) => onModelChange(index, { modelName })}
             componentId={`${componentId}.model`}
           />
+
+          {model.provider === 'bedrock' && (
+            <div>
+              <div
+                css={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: theme.spacing.sm,
+                  marginBottom: theme.spacing.sm,
+                }}
+              >
+                <FormUI.Label css={{ margin: 0 }}>
+                  <FormattedMessage defaultMessage="Service tier" description="Label for Bedrock service tier selector" />
+                </FormUI.Label>
+                {model.serviceTier && (
+                  <Button
+                    componentId={`${componentId}.service-tier.clear`}
+                    type="tertiary"
+                    size="small"
+                    onClick={() => onModelChange(index, { serviceTier: '' })}
+                  >
+                    <FormattedMessage
+                      defaultMessage="Clear selection"
+                      description="Button to clear the selected Bedrock service tier"
+                    />
+                  </Button>
+                )}
+              </div>
+
+              <Radio.Group
+                componentId={`${componentId}.service-tier`}
+                name={`${domId}.service-tier`}
+                value={serviceTierSelection}
+                onChange={handleServiceTierChange}
+              >
+                <div css={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
+                  {BEDROCK_SERVICE_TIER_OPTIONS.map((option) => (
+                    <Radio key={option.value} value={option.value}>
+                      <div>
+                        <div css={{ fontWeight: theme.typography.typographyBoldFontWeight }}>{option.value}</div>
+                        <div css={{ color: theme.colors.textSecondary, fontSize: theme.typography.fontSizeSm }}>
+                          {option.description}
+                        </div>
+                      </div>
+                    </Radio>
+                  ))}
+                  <Radio value="custom">
+                    <div>
+                      <div css={{ fontWeight: theme.typography.typographyBoldFontWeight }}>
+                        <FormattedMessage
+                          defaultMessage="Custom value"
+                          description="Option to enter a custom Bedrock service tier"
+                        />
+                      </div>
+                      <div css={{ color: theme.colors.textSecondary, fontSize: theme.typography.fontSizeSm }}>
+                        <FormattedMessage
+                          defaultMessage="Enter any Bedrock-supported service tier value."
+                          description="Description for custom Bedrock service tier option"
+                        />
+                      </div>
+                    </div>
+                  </Radio>
+                </div>
+              </Radio.Group>
+
+              {serviceTierSelection === 'custom' && (
+                <div css={{ marginTop: theme.spacing.sm }}>
+                  <GatewayInput
+                    componentId={`${componentId}.service-tier.custom`}
+                    value={model.serviceTier}
+                    onChange={(e) => onModelChange(index, { serviceTier: e.target.value })}
+                    placeholder={intl.formatMessage({
+                      defaultMessage: 'Enter a custom service tier',
+                      description: 'Placeholder for custom Bedrock service tier input',
+                    })}
+                  />
+                </div>
+              )}
+            </div>
+          )}
 
           <ApiKeyConfigurator
             value={apiKeyConfig}

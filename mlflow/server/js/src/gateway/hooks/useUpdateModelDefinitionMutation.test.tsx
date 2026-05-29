@@ -51,6 +51,7 @@ describe('useUpdateModelDefinitionMutation', () => {
         secretId: 'secret-456',
         provider: 'anthropic',
         modelName: 'claude-3',
+        serviceTier: 'priority',
       });
     });
 
@@ -63,6 +64,7 @@ describe('useUpdateModelDefinitionMutation', () => {
       secret_id: 'secret-456',
       provider: 'anthropic',
       model_name: 'claude-3',
+      service_tier: 'priority',
     });
   });
 
@@ -101,6 +103,7 @@ describe('useUpdateModelDefinitionMutation', () => {
       secret_id: 'secret-789',
       provider: undefined,
       model_name: undefined,
+      service_tier: undefined,
     });
   });
 

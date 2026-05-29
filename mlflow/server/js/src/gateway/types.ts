@@ -102,6 +102,7 @@ export interface ModelDefinition {
   secret_name: string;
   provider: string;
   model_name: string;
+  service_tier?: string;
   created_at: number;
   last_updated_at: number;
   created_by?: string;
@@ -211,6 +212,7 @@ export interface CreateModelDefinitionRequest {
   secret_id: string;
   provider: string;
   model_name: string;
+  service_tier?: string;
   created_by?: string;
 }
 
@@ -232,6 +234,7 @@ export interface UpdateModelDefinitionRequest {
   secret_id?: string;
   provider?: string;
   model_name?: string;
+  service_tier?: string;
   last_updated_by?: string;
 }
 

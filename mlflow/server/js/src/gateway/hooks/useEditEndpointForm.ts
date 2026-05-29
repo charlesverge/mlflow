@@ -19,6 +19,7 @@ export interface TrafficSplitModel {
   modelDefinitionName: string;
   provider: string;
   modelName: string;
+  serviceTier: string;
   secretMode: 'new' | 'existing';
   existingSecretId: string;
   newSecret: {
@@ -70,6 +71,10 @@ export interface UseEditEndpointFormResult {
   handleUsageTrackingUpdate: (enabled: boolean) => Promise<void>;
 }
 
+const isTrafficSplitModel = (model: TrafficSplitModel | FallbackModel): model is TrafficSplitModel => 'weight' in model;
+
+const normalizeServiceTier = (serviceTier?: string) => serviceTier ?? '';
+
 export function useEditEndpointForm(endpointId: string): UseEditEndpointFormResult {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -101,6 +106,7 @@ export function useEditEndpointForm(endpointId: string): UseEditEndpointFormResu
             modelDefinitionName: m.model_definition?.name ?? '',
             provider: m.model_definition?.provider ?? '',
             modelName: m.model_definition?.model_name ?? '',
+            serviceTier: m.model_definition?.service_tier ?? '',
             secretMode: 'existing' as const,
             existingSecretId: m.model_definition?.secret_id ?? '',
             newSecret: {
@@ -182,6 +188,9 @@ export function useEditEndpointForm(endpointId: string): UseEditEndpointFormResu
               const hasChanges =
                 model.provider !== originalMapping.model_definition.provider ||
                 model.modelName !== originalMapping.model_definition.model_name ||
+                (isTrafficSplitModel(model) &&
+                  normalizeServiceTier(model.serviceTier) !==
+                    normalizeServiceTier(originalMapping.model_definition.service_tier)) ||
                 (model.secretMode === 'existing' &&
                   model.existingSecretId !== originalMapping.model_definition.secret_id) ||
                 model.secretMode === 'new';
@@ -194,6 +203,7 @@ export function useEditEndpointForm(endpointId: string): UseEditEndpointFormResu
                   secretId,
                   provider: model.provider,
                   modelName: model.modelName,
+                  serviceTier: isTrafficSplitModel(model) ? model.serviceTier || undefined : undefined,
                 });
               }
             }
@@ -225,6 +235,7 @@ export function useEditEndpointForm(endpointId: string): UseEditEndpointFormResu
             secret_id: secretId,
             provider: model.provider,
             model_name: model.modelName,
+            service_tier: isTrafficSplitModel(model) ? model.serviceTier || undefined : undefined,
           });
 
           return modelDefResponse.model_definition.model_definition_id;
@@ -383,6 +394,7 @@ export function useEditEndpointForm(endpointId: string): UseEditEndpointFormResu
         const modelDefChanged =
           model.provider !== original.model_definition.provider ||
           model.modelName !== original.model_definition.model_name ||
+          normalizeServiceTier(model.serviceTier) !== normalizeServiceTier(original.model_definition.service_tier) ||
           (model.secretMode === 'existing' && model.existingSecretId !== original.model_definition.secret_id) ||
           model.secretMode === 'new';
 
@@ -392,6 +404,7 @@ export function useEditEndpointForm(endpointId: string): UseEditEndpointFormResu
       return (
         model.provider !== original.model_definition.provider ||
         model.modelName !== original.model_definition.model_name ||
+        normalizeServiceTier(model.serviceTier) !== normalizeServiceTier(original.model_definition.service_tier) ||
         model.secretMode !== 'existing' ||
         model.existingSecretId !== original.model_definition.secret_id ||
         Math.abs(model.weight - originalWeightPercent) > 0.01
