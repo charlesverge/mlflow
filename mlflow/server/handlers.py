@@ -787,6 +787,11 @@ def _assert_string(x):
     assert isinstance(x, str)
 
 
+def _assert_non_blank_string(x):
+    _assert_string(x)
+    assert x.strip() != ""
+
+
 def _assert_intlike(x):
     try:
         x = int(x)
@@ -5405,6 +5410,7 @@ def _create_gateway_model_definition():
             "secret_id": [_assert_required, _assert_string],
             "provider": [_assert_required, _assert_string],
             "model_name": [_assert_required, _assert_string],
+            "service_tier": [_assert_non_blank_string],
             "created_by": [_assert_string],
         },
     )
@@ -5413,6 +5419,9 @@ def _create_gateway_model_definition():
         secret_id=request_message.secret_id,
         provider=request_message.provider,
         model_name=request_message.model_name,
+        service_tier=(
+            request_message.service_tier if request_message.HasField("service_tier") else None
+        ),
         created_by=request_message.created_by or None,
     )
     response_message = CreateGatewayModelDefinition.Response()
@@ -5466,6 +5475,7 @@ def _update_gateway_model_definition():
             "name": [_assert_string],
             "secret_id": [_assert_string],
             "model_name": [_assert_string],
+            "service_tier": [_assert_non_blank_string],
             "updated_by": [_assert_string],
             "provider": [_assert_string],
         },
@@ -5475,6 +5485,9 @@ def _update_gateway_model_definition():
         name=request_message.name or None,
         secret_id=request_message.secret_id or None,
         model_name=request_message.model_name or None,
+        service_tier=(
+            request_message.service_tier if request_message.HasField("service_tier") else None
+        ),
         updated_by=request_message.updated_by or None,
         provider=request_message.provider or None,
     )

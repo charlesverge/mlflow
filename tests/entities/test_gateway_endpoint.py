@@ -16,6 +16,7 @@ def test_model_definition_creation_full():
         secret_name="openai_api_key",
         provider="openai",
         model_name="gpt-4o",
+        service_tier="priority",
         created_at=1234567890000,
         last_updated_at=1234567890000,
         created_by="test_user",
@@ -28,6 +29,7 @@ def test_model_definition_creation_full():
     assert model_def.secret_name == "openai_api_key"
     assert model_def.provider == "openai"
     assert model_def.model_name == "gpt-4o"
+    assert model_def.service_tier == "priority"
     assert model_def.created_at == 1234567890000
     assert model_def.last_updated_at == 1234567890000
     assert model_def.created_by == "test_user"
@@ -73,6 +75,26 @@ def test_model_definition_various_providers():
 
         assert model_def.provider == provider
         assert model_def.model_name == model_name
+
+
+def test_model_definition_proto_roundtrip_preserves_service_tier():
+    model_def = GatewayModelDefinition(
+        model_definition_id="model-def-bedrock",
+        name="Claude Sonnet Priority",
+        secret_id="secret-bedrock",
+        secret_name="bedrock_auth",
+        provider="bedrock",
+        model_name="anthropic.claude-3-5-sonnet-20241022-v2:0",
+        service_tier="optimized",
+        created_at=1234567890000,
+        last_updated_at=1234567890001,
+        created_by="creator",
+        last_updated_by="updater",
+    )
+
+    restored = GatewayModelDefinition.from_proto(model_def.to_proto())
+
+    assert restored == model_def
 
 
 def test_endpoint_model_mapping_creation():

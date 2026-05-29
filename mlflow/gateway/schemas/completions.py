@@ -54,6 +54,7 @@ class ResponsePayload(ResponseModel):
     model: str
     choices: list[Choice]
     usage: CompletionsUsage
+    service_tier: str | None = None
 
     model_config = ConfigDict(json_schema_extra=_RESPONSE_PAYLOAD_EXTRA_SCHEMA)
 

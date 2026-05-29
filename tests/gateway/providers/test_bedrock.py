@@ -403,6 +403,7 @@ async def test_bedrock_request_response(
             pytest.skip("no expected value")
 
         expected["model"] = config["model"]["name"]
+        expected.setdefault("service_tier", None)
 
         provider = AmazonBedrockProvider(
             EndpointConfig(**_merge_model_and_aws_config(config, aws_config))
@@ -445,6 +446,26 @@ def _make_converse_provider():
             "config": {"aws_config": {"aws_region": "us-east-1"}},
         },
     }
+    return AmazonBedrockProvider(EndpointConfig(**config))
+
+
+def _make_bedrock_provider(
+    model_name: str = "anthropic.claude-3-5-sonnet-20240620-v1:0",
+    *,
+    endpoint_type: str = "llm/v1/chat",
+    service_tier: str | None = None,
+):
+    config = {
+        "name": "test-endpoint",
+        "endpoint_type": endpoint_type,
+        "model": {
+            "provider": "bedrock",
+            "name": model_name,
+            "config": {"aws_config": {"aws_region": "us-west-2"}},
+        },
+    }
+    if service_tier is not None:
+        config["model"]["config"]["service_tier"] = service_tier
     return AmazonBedrockProvider(EndpointConfig(**config))
 
 
@@ -656,7 +677,9 @@ async def test_bedrock_converse_serializes_assistant_tool_call_history():
     assistant_blocks = call_kwargs["messages"][1]["content"]
     tool_uses = [b["toolUse"] for b in assistant_blocks if "toolUse" in b]
     assert tool_uses == [{"toolUseId": "tool_abc123", "name": "add", "input": {"a": 17, "b": 25}}]
-    tool_results = [b["toolResult"] for b in call_kwargs["messages"][2]["content"] if "toolResult" in b]
+    tool_results = [
+        b["toolResult"] for b in call_kwargs["messages"][2]["content"] if "toolResult" in b
+    ]
     assert tool_results == [{"toolUseId": "tool_abc123", "content": [{"text": "42"}]}]
     mock_client.converse.assert_called_once()
 
@@ -709,7 +732,9 @@ async def test_bedrock_converse_groups_consecutive_tool_results_into_one_user_me
 
     call_kwargs = mock_client.converse.call_args.kwargs
     assert len(call_kwargs["messages"]) == 3
-    tool_results = [b["toolResult"] for b in call_kwargs["messages"][2]["content"] if "toolResult" in b]
+    tool_results = [
+        b["toolResult"] for b in call_kwargs["messages"][2]["content"] if "toolResult" in b
+    ]
     assert tool_results == [
         {"toolUseId": "tool_abc123", "content": [{"text": "42"}]},
         {"toolUseId": "tool_def456", "content": [{"text": "15"}]},
@@ -783,3 +808,111 @@ async def test_bedrock_converse_rejects_assistant_tool_call_with_missing_name():
     assert exc_info.value.status_code == 422
     assert "tool_call_id=tool_missing_name" in exc_info.value.detail
     mock_client.converse.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_bedrock_completions_request_uses_configured_service_tier():
+    provider = _make_bedrock_provider(
+        model_name="anthropic.claude-v2",
+        endpoint_type="llm/v1/completions",
+        service_tier="priority",
+    )
+    payload = completions.RequestPayload(prompt="How does a car work?", max_tokens=32)
+
+    with mock.patch.object(
+        provider, "_request", return_value=anthropic_completions_response()
+    ) as req:
+        response = await provider.completions(payload)
+
+    request_body = req.call_args.args[0]
+    assert request_body["serviceTier"] == "priority"
+    assert response.service_tier is None
+
+
+@pytest.mark.asyncio
+async def test_bedrock_completions_request_accepts_snake_case_service_tier():
+    provider = _make_bedrock_provider(
+        model_name="anthropic.claude-v2",
+        endpoint_type="llm/v1/completions",
+    )
+    payload = completions.RequestPayload.model_validate(
+        {"prompt": "How does a car work?", "max_tokens": 32, "service_tier": "optimized"}
+    )
+
+    with mock.patch.object(
+        provider, "_request", return_value=anthropic_completions_response()
+    ) as req:
+        await provider.completions(payload)
+
+    request_body = req.call_args.args[0]
+    assert request_body["serviceTier"] == "optimized"
+    assert "service_tier" not in request_body
+
+
+@pytest.mark.asyncio
+async def test_bedrock_completions_configured_service_tier_takes_precedence():
+    provider = _make_bedrock_provider(
+        model_name="anthropic.claude-v2",
+        endpoint_type="llm/v1/completions",
+        service_tier="priority",
+    )
+    payload = completions.RequestPayload.model_validate(
+        {"prompt": "How does a car work?", "max_tokens": 32, "serviceTier": "optimized"}
+    )
+
+    with mock.patch.object(
+        provider, "_request", return_value=anthropic_completions_response()
+    ) as req:
+        await provider.completions(payload)
+
+    request_body = req.call_args.args[0]
+    assert request_body["serviceTier"] == "priority"
+
+
+@pytest.mark.asyncio
+async def test_bedrock_completions_response_maps_service_tier():
+    provider = _make_bedrock_provider(
+        model_name="anthropic.claude-v2",
+        endpoint_type="llm/v1/completions",
+    )
+    payload = completions.RequestPayload(prompt="How does a car work?", max_tokens=32)
+    response_payload = anthropic_completions_response() | {"serviceTier": "priority"}
+
+    with mock.patch.object(provider, "_request", return_value=response_payload):
+        response = await provider.completions(payload)
+
+    assert response.service_tier == "priority"
+
+
+@pytest.mark.parametrize("service_tier_key", ["service_tier", "serviceTier"])
+@pytest.mark.asyncio
+async def test_bedrock_rejects_invalid_request_service_tier(service_tier_key: str):
+    provider = _make_bedrock_provider()
+    payload = chat.RequestPayload.model_validate(
+        {
+            "messages": [{"role": "user", "content": "hello"}],
+            service_tier_key: "   ",
+        }
+    )
+
+    with pytest.raises(AIGatewayException, match="service_tier' must not be empty"):
+        await provider.chat(payload)
+
+
+@pytest.mark.asyncio
+async def test_bedrock_converse_request_uses_service_tier():
+    provider = _make_bedrock_provider(service_tier="priority")
+    payload = chat.RequestPayload(messages=[{"role": "user", "content": "hello"}], max_tokens=64)
+    response_payload = {
+        "output": {"message": {"content": [{"text": "hi"}]}},
+        "usage": {"inputTokens": 1, "outputTokens": 1, "totalTokens": 2},
+        "serviceTier": "priority",
+    }
+
+    with mock.patch.object(provider, "get_bedrock_client") as get_client:
+        get_client.return_value.converse.return_value = response_payload
+        response = await provider.chat(payload)
+
+    kwargs = get_client.return_value.converse.call_args.kwargs
+    assert kwargs["serviceTier"] == "priority"
+    assert response.service_tier == "priority"

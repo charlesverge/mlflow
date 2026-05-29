@@ -113,6 +113,22 @@ def _validate_one_of(
         )
 
 
+def _validate_service_tier(service_tier: str | None) -> str | None:
+    if service_tier is None:
+        return None
+    if not isinstance(service_tier, str):
+        raise MlflowException(
+            "service_tier must be a string",
+            error_code=INVALID_PARAMETER_VALUE,
+        )
+    if not service_tier.strip():
+        raise MlflowException(
+            "service_tier must not be empty or whitespace only",
+            error_code=INVALID_PARAMETER_VALUE,
+        )
+    return service_tier
+
+
 class SqlAlchemyGatewayStoreMixin:
     """Mixin class providing SQLAlchemy Gateway implementations for tracking stores.
 
@@ -371,6 +387,7 @@ class SqlAlchemyGatewayStoreMixin:
         secret_id: str,
         provider: str,
         model_name: str,
+        service_tier: str | None = None,
         created_by: str | None = None,
     ) -> GatewayModelDefinition:
         """
@@ -381,11 +398,13 @@ class SqlAlchemyGatewayStoreMixin:
             secret_id: ID of the secret containing authentication credentials.
             provider: LLM provider (e.g., "openai", "anthropic", "cohere", "bedrock").
             model_name: Provider-specific model identifier (e.g., "gpt-4o").
+            service_tier: Optional provider-specific service tier override.
             created_by: Username of the creator.
 
         Returns:
             GatewayModelDefinition entity with metadata.
         """
+        service_tier = _validate_service_tier(service_tier)
         with self.ManagedSessionMaker(read_only=False) as session:
             sql_secret = self._get_entity_or_raise(
                 session, SqlGatewaySecret, {"secret_id": secret_id}, "GatewaySecret"
@@ -401,6 +420,7 @@ class SqlAlchemyGatewayStoreMixin:
                     secret_id=secret_id,
                     provider=provider,
                     model_name=model_name,
+                    service_tier=service_tier,
                     created_at=current_time,
                     last_updated_at=current_time,
                     created_by=created_by,
@@ -426,6 +446,7 @@ class SqlAlchemyGatewayStoreMixin:
                 secret_name=sql_secret.secret_name,
                 provider=sql_model_def.provider,
                 model_name=sql_model_def.model_name,
+                service_tier=sql_model_def.service_tier,
                 created_at=sql_model_def.created_at,
                 last_updated_at=sql_model_def.last_updated_at,
                 created_by=sql_model_def.created_by,
@@ -494,6 +515,7 @@ class SqlAlchemyGatewayStoreMixin:
         name: str | None = None,
         secret_id: str | None = None,
         model_name: str | None = None,
+        service_tier: str | None = None,
         updated_by: str | None = None,
         provider: str | None = None,
     ) -> GatewayModelDefinition:
@@ -505,6 +527,7 @@ class SqlAlchemyGatewayStoreMixin:
             name: Optional new name.
             secret_id: Optional new secret ID.
             model_name: Optional new model name.
+            service_tier: Optional new provider-specific service tier override.
             updated_by: Username of the updater.
             provider: Optional new provider.
 
@@ -516,6 +539,7 @@ class SqlAlchemyGatewayStoreMixin:
                 (RESOURCE_DOES_NOT_EXIST), or if the new name conflicts with an existing
                 model definition (RESOURCE_ALREADY_EXISTS).
         """
+        service_tier = _validate_service_tier(service_tier)
         with self.ManagedSessionMaker(read_only=False) as session:
             sql_model_def = self._get_entity_or_raise(
                 session,
@@ -533,6 +557,8 @@ class SqlAlchemyGatewayStoreMixin:
                 sql_model_def.secret_id = secret_id
             if model_name is not None:
                 sql_model_def.model_name = model_name
+            if service_tier is not None:
+                sql_model_def.service_tier = service_tier
             if provider is not None:
                 sql_model_def.provider = provider
 

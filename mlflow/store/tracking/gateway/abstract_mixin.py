@@ -136,6 +136,7 @@ class GatewayStoreMixin:
         secret_id: str,
         provider: str,
         model_name: str,
+        service_tier: str | None = None,
         created_by: str | None = None,
     ) -> GatewayModelDefinition:
         """
@@ -149,6 +150,7 @@ class GatewayStoreMixin:
             secret_id: ID of the secret containing authentication credentials.
             provider: LLM provider (e.g., "openai", "anthropic", "cohere", "bedrock").
             model_name: Provider-specific model identifier (e.g., "gpt-4o", "claude-3-5-sonnet").
+            service_tier: Optional provider-specific service tier override.
             created_by: Username of the creator.
 
         Returns:
@@ -194,6 +196,7 @@ class GatewayStoreMixin:
         name: str | None = None,
         secret_id: str | None = None,
         model_name: str | None = None,
+        service_tier: str | None = None,
         updated_by: str | None = None,
         provider: str | None = None,
     ) -> GatewayModelDefinition:
@@ -205,6 +208,7 @@ class GatewayStoreMixin:
             name: Optional new name.
             secret_id: Optional new secret ID.
             model_name: Optional new model name.
+            service_tier: Optional new provider-specific service tier override.
             updated_by: Username of the updater.
             provider: Optional new provider.
 

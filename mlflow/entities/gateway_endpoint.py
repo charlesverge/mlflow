@@ -175,6 +175,7 @@ class GatewayModelDefinition(_MlflowObject):
         secret_name: Name of the secret for display/reference purposes (None if orphaned).
         provider: LLM provider (e.g., "openai", "anthropic", "cohere", "bedrock").
         model_name: Provider-specific model identifier (e.g., "gpt-4o", "claude-3-5-sonnet").
+        service_tier: Optional provider-specific service tier override for this model definition.
         created_at: Timestamp (milliseconds) when the model definition was created.
         last_updated_at: Timestamp (milliseconds) when the model definition was last updated.
         created_by: User ID who created the model definition.
@@ -190,6 +191,7 @@ class GatewayModelDefinition(_MlflowObject):
     model_name: str
     created_at: int
     last_updated_at: int
+    service_tier: str | None = None
     created_by: str | None = None
     last_updated_by: str | None = None
     workspace: str | None = None
@@ -207,6 +209,8 @@ class GatewayModelDefinition(_MlflowObject):
             proto.secret_name = self.secret_name
         proto.provider = self.provider
         proto.model_name = self.model_name
+        if self.service_tier is not None:
+            proto.service_tier = self.service_tier
         proto.created_at = self.created_at
         proto.last_updated_at = self.last_updated_at
         if self.created_by is not None:
@@ -224,6 +228,7 @@ class GatewayModelDefinition(_MlflowObject):
             secret_name=proto.secret_name or None,
             provider=proto.provider,
             model_name=proto.model_name,
+            service_tier=proto.service_tier or None,
             created_at=proto.created_at,
             last_updated_at=proto.last_updated_at,
             created_by=proto.created_by or None,

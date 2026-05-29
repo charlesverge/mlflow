@@ -4839,6 +4839,8 @@ message GatewayModelDefinition {
   optional string provider = 5;
   // Provider-specific model identifier (e.g., "gpt-4o", "claude-3-5-sonnet")
   optional string model_name = 6;
+  // Optional provider-specific service tier override
+  optional string service_tier = 12;
   // Timestamp (milliseconds since epoch) when the model definition was created
   optional int64 created_at = 7;
   // Timestamp (milliseconds since epoch) when the model definition was last updated
@@ -5019,6 +5021,8 @@ message CreateGatewayModelDefinition {
   optional string provider = 3;
   // Provider-specific model identifier (e.g., "gpt-4o", "claude-3-5-sonnet")
   optional string model_name = 4;
+  // Optional provider-specific service tier override
+  optional string service_tier = 6;
   // Username of the creator
   optional string created_by = 5;
 
@@ -5059,6 +5063,8 @@ message UpdateGatewayModelDefinition {
   optional string secret_id = 3;
   // Optional new model name
   optional string model_name = 4;
+  // Optional new provider-specific service tier override
+  optional string service_tier = 7;
   // Username of the updater
   optional string updated_by = 5;
   // Optional new provider

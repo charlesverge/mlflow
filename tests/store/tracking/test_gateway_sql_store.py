@@ -419,12 +419,14 @@ def test_get_gateway_model_definition_by_id(store: SqlAlchemyStore):
         secret_id=secret.secret_id,
         provider="anthropic",
         model_name="claude-3-sonnet",
+        service_tier="priority",
     )
 
     retrieved = store.get_gateway_model_definition(model_definition_id=created.model_definition_id)
 
     assert retrieved.model_definition_id == created.model_definition_id
     assert retrieved.name == "model-by-id"
+    assert retrieved.service_tier == "priority"
 
 
 def test_get_gateway_model_definition_by_name(store: SqlAlchemyStore):
@@ -481,11 +483,53 @@ def test_update_gateway_model_definition(store: SqlAlchemyStore):
     updated = store.update_gateway_model_definition(
         model_definition_id=created.model_definition_id,
         model_name="gpt-4-turbo",
+        service_tier="optimized",
         updated_by="updater",
     )
 
     assert updated.model_name == "gpt-4-turbo"
+    assert updated.service_tier == "optimized"
     assert updated.last_updated_by == "updater"
+
+
+@pytest.mark.parametrize("service_tier", ["priority", "optimized", "custom-tier"])
+def test_create_gateway_model_definition_persists_service_tier(
+    store: SqlAlchemyStore, service_tier: str
+):
+    secret = store.create_gateway_secret(
+        secret_name=f"service-tier-key-{service_tier}", secret_value={"api_key": "value"}
+    )
+
+    created = store.create_gateway_model_definition(
+        name=f"service-tier-model-{service_tier}",
+        secret_id=secret.secret_id,
+        provider="bedrock",
+        model_name="anthropic.claude-3-5-sonnet-20241022-v2:0",
+        service_tier=service_tier,
+    )
+
+    retrieved = store.get_gateway_model_definition(model_definition_id=created.model_definition_id)
+
+    assert created.service_tier == service_tier
+    assert retrieved.service_tier == service_tier
+
+
+@pytest.mark.parametrize("service_tier", ["", "   "])
+def test_gateway_model_definition_rejects_blank_service_tier(
+    store: SqlAlchemyStore, service_tier: str
+):
+    secret = store.create_gateway_secret(
+        secret_name=f"blank-service-tier-{len(service_tier)}", secret_value={"api_key": "value"}
+    )
+
+    with pytest.raises(MlflowException, match="service_tier must not be empty or whitespace only"):
+        store.create_gateway_model_definition(
+            name=f"blank-service-tier-model-{len(service_tier)}",
+            secret_id=secret.secret_id,
+            provider="bedrock",
+            model_name="anthropic.claude-3-5-sonnet-20241022-v2:0",
+            service_tier=service_tier,
+        )
 
 
 def test_delete_gateway_model_definition(store: SqlAlchemyStore):
@@ -1521,6 +1565,33 @@ def test_get_gateway_endpoint_config_multiple_models(store: SqlAlchemyStore):
     assert model_names == {"gpt-4", "claude-3-opus"}
 
 
+def test_get_gateway_endpoint_config_includes_service_tier(store: SqlAlchemyStore):
+    secret = store.create_gateway_secret(
+        secret_name="ep-service-tier-key", secret_value={"api_key": "value"}
+    )
+    model_def = store.create_gateway_model_definition(
+        name="ep-service-tier-model",
+        secret_id=secret.secret_id,
+        provider="bedrock",
+        model_name="anthropic.claude-3-5-sonnet-20241022-v2:0",
+        service_tier="priority",
+    )
+    endpoint = store.create_gateway_endpoint(
+        name="ep-service-tier-endpoint",
+        model_configs=[
+            GatewayEndpointModelConfig(
+                model_definition_id=model_def.model_definition_id,
+                linkage_type=GatewayModelLinkageType.PRIMARY,
+                weight=1.0,
+            )
+        ],
+    )
+
+    config = get_endpoint_config(endpoint_name=endpoint.name, store=store)
+
+    assert config.models[0].service_tier == "priority"
+
+
 def test_get_gateway_endpoint_config_nonexistent_endpoint_raises(store: SqlAlchemyStore):
     with pytest.raises(MlflowException, match="not found") as exc:
         get_endpoint_config(
@@ -1571,6 +1642,7 @@ def test_gateway_model_config_roundtrip():
         model_name="gpt-4",
         secret_value={"api_key": "sk-test"},
         auth_config={"region": "us-east-1"},
+        service_tier="priority",
         weight=0.7,
         linkage_type=GatewayModelLinkageType.FALLBACK,
         fallback_order=2,

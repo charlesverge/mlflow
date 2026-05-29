@@ -3446,6 +3446,7 @@ def test_create_gateway_model_definition():
             secret_id="secret-456",
             provider="anthropic",
             model_name="claude-3-5-sonnet",
+            service_tier="priority",
         )
         body = message_to_json(
             CreateGatewayModelDefinition(
@@ -3453,6 +3454,7 @@ def test_create_gateway_model_definition():
                 secret_id="secret-456",
                 provider="anthropic",
                 model_name="claude-3-5-sonnet",
+                service_tier="priority",
             )
         )
         _verify_requests(
@@ -3493,12 +3495,14 @@ def test_update_gateway_model_definition():
             model_definition_id="model-def-123",
             name="updated-name",
             model_name="gpt-4o-mini",
+            service_tier="optimized",
         )
         body = message_to_json(
             UpdateGatewayModelDefinition(
                 model_definition_id="model-def-123",
                 name="updated-name",
                 model_name="gpt-4o-mini",
+                service_tier="optimized",
             )
         )
         _verify_requests(

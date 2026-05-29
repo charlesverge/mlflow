@@ -2661,6 +2661,10 @@ class SqlGatewayModelDefinition(Base):
     Model name: `String` (limit 256 characters). Provider-specific model identifier.
     E.g., "claude-3-5-sonnet-20241022", "gpt-4o", "command-r-plus".
     """
+    service_tier = Column(String(255), nullable=True)
+    """
+    Service tier: `String` (limit 255 characters). Optional provider-specific service tier.
+    """
     created_by = Column(String(255), nullable=True)
     """
     Creator user ID: `String` (limit 255 characters).
@@ -2712,6 +2716,7 @@ class SqlGatewayModelDefinition(Base):
             secret_name=self.secret.secret_name if self.secret else None,
             provider=self.provider,
             model_name=self.model_name,
+            service_tier=self.service_tier,
             created_at=self.created_at,
             last_updated_at=self.last_updated_at,
             created_by=self.created_by,

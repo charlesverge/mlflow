@@ -307,12 +307,42 @@ class AmazonBedrockProvider(BaseProvider):
         except botocore.exceptions.ReadTimeoutError as e:
             raise AIGatewayException(status_code=408) from e
 
+    @staticmethod
+    def _validate_service_tier(value: Any, source: str) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise AIGatewayException(
+                status_code=422,
+                detail=f"Invalid {source}: 'service_tier' must be a string.",
+            )
+        if not value.strip():
+            raise AIGatewayException(
+                status_code=422,
+                detail=f"Invalid {source}: 'service_tier' must not be empty.",
+            )
+        return value
+
+    def _extract_request_service_tier(self, payload: dict[str, Any]) -> str | None:
+        service_tier = payload.pop("service_tier", None)
+        if service_tier is None and "serviceTier" in payload:
+            service_tier = payload.pop("serviceTier")
+        else:
+            payload.pop("serviceTier", None)
+        return self._validate_service_tier(service_tier, "request payload")
+
+    def _resolve_service_tier(self, payload: dict[str, Any]) -> str | None:
+        configured_service_tier = self.bedrock_config.service_tier
+        request_service_tier = self._extract_request_service_tier(payload)
+        return configured_service_tier or request_service_tier
+
     # ---- Converse API helpers ----
 
     def _build_converse_kwargs(
         self, messages: list[dict[str, Any]], payload: dict[str, Any]
     ) -> dict[str, Any]:
         """Build kwargs for the Converse API call."""
+        service_tier = self._resolve_service_tier(payload)
         system_prompts = []
         converse_messages = []
 
@@ -404,6 +434,8 @@ class AmazonBedrockProvider(BaseProvider):
 
         if system_prompts:
             kwargs["system"] = system_prompts
+        if service_tier is not None:
+            kwargs["serviceTier"] = service_tier
 
         # Build inferenceConfig from OpenAI params
         inference_config = {}
@@ -498,6 +530,7 @@ class AmazonBedrockProvider(BaseProvider):
                 completion_tokens=usage.get("outputTokens"),
                 total_tokens=usage.get("totalTokens"),
             ),
+            service_tier=response.get("serviceTier"),
         )
 
     # ---- API methods ----
@@ -750,6 +783,11 @@ class AmazonBedrockProvider(BaseProvider):
 
         self.check_for_model_field(payload)
         payload = jsonable_encoder(payload, exclude_none=True, exclude_defaults=True)
+        service_tier = self._resolve_service_tier(payload)
         payload = self.adapter_class.completions_to_model(payload, self.config)
+        if service_tier is not None:
+            payload["serviceTier"] = service_tier
         response = self._request(payload)
-        return self.adapter_class.model_to_completions(response, self.config)
+        result = self.adapter_class.model_to_completions(response, self.config)
+        result.service_tier = response.get("serviceTier")
+        return result

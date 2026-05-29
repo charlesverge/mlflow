@@ -142,7 +142,7 @@ def _get_optional_header(request: Request, header_name: str) -> str | None:
     if value is None:
         return None
     stripped_value = value.strip()
-    return stripped_value if stripped_value else None
+    return stripped_value or None
 
 
 def _get_gateway_trace_context(request: Request) -> tuple[dict[str, Any], str | None, str | None]:
@@ -391,7 +391,8 @@ def _build_endpoint_config(
                 aws_config={
                     "aws_bearer_token": model_config.secret_value.get(_AuthConfigKey.API_KEY),
                     "aws_region": auth_config.get("aws_region_name"),
-                }
+                },
+                service_tier=model_config.service_tier,
             )
         elif auth_mode == "access_keys":
             provider_config = AmazonBedrockConfig(
@@ -399,14 +400,16 @@ def _build_endpoint_config(
                     "aws_access_key_id": model_config.secret_value.get("aws_access_key_id"),
                     "aws_secret_access_key": model_config.secret_value.get("aws_secret_access_key"),
                     "aws_region": auth_config.get("aws_region_name"),
-                }
+                },
+                service_tier=model_config.service_tier,
             )
         elif auth_mode == "iam_role":
             provider_config = AmazonBedrockConfig(
                 aws_config={
                     "aws_role_arn": auth_config.get("aws_role_name"),
                     "aws_region": auth_config.get("aws_region_name"),
-                }
+                },
+                service_tier=model_config.service_tier,
             )
         else:
             # default_chain — boto3 resolves credentials from the
@@ -414,7 +417,10 @@ def _build_endpoint_config(
             aws_config = {"aws_region": auth_config.get("aws_region_name")}
             if role_arn := auth_config.get("aws_role_name"):
                 aws_config["aws_role_arn"] = role_arn
-            provider_config = AmazonBedrockConfig(aws_config=aws_config)
+            provider_config = AmazonBedrockConfig(
+                aws_config=aws_config,
+                service_tier=model_config.service_tier,
+            )
         model_config.provider = Provider.BEDROCK
     elif model_config.provider == Provider.VERTEX_AI:
         auth_config = model_config.auth_config or {}

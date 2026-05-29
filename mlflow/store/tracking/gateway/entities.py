@@ -28,6 +28,7 @@ class GatewayModelConfig:
             {"api_key": "..."}.
         auth_config: Non-secret configuration including auth_mode (e.g.,
             {"auth_mode": "access_keys", "aws_region_name": "us-east-1"}).
+        service_tier: Optional provider-specific service tier override.
         weight: Routing weight for traffic distribution (default 1.0).
         linkage_type: Type of linkage (PRIMARY or FALLBACK).
         fallback_order: Order for fallback attempts (only for FALLBACK linkages, None for PRIMARY).
@@ -38,6 +39,7 @@ class GatewayModelConfig:
     model_name: str
     secret_value: dict[str, Any]
     auth_config: dict[str, Any] | None = None
+    service_tier: str | None = None
     weight: float = 1.0
     linkage_type: GatewayModelLinkageType = GatewayModelLinkageType.PRIMARY
     fallback_order: int | None = None

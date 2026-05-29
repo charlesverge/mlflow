@@ -253,6 +253,7 @@ class AWSBearerToken(AWSBaseConfig):
 class AmazonBedrockConfig(ConfigModel):
     # order here is important, at least for pydantic<2
     aws_config: AWSBearerToken | AWSRole | AWSIdAndKey | AWSBaseConfig
+    service_tier: str | None = None
 
 
 class MistralConfig(ConfigModel):

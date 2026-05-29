@@ -108,6 +108,7 @@ class ResponsePayload(ChatCompletionResponse, ResponseModel):
     choices: list[Choice]
     # Provider that actually handled the request (set by BaseProvider after the call)
     provider: str | None = None
+    service_tier: str | None = None
 
     model_config = ConfigDict(json_schema_extra=_RESPONSE_PAYLOAD_EXTRA_SCHEMA)
 

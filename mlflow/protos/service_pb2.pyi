@@ -1890,13 +1890,14 @@ class GatewaySecretInfo(_message.Message):
     def __init__(self, secret_id: _Optional[str] = ..., secret_name: _Optional[str] = ..., masked_values: _Optional[_Mapping[str, str]] = ..., created_at: _Optional[int] = ..., last_updated_at: _Optional[int] = ..., provider: _Optional[str] = ..., created_by: _Optional[str] = ..., last_updated_by: _Optional[str] = ..., auth_config: _Optional[_Mapping[str, str]] = ...) -> None: ...
 
 class GatewayModelDefinition(_message.Message):
-    __slots__ = ("model_definition_id", "name", "secret_id", "secret_name", "provider", "model_name", "created_at", "last_updated_at", "created_by", "last_updated_by")
+    __slots__ = ("model_definition_id", "name", "secret_id", "secret_name", "provider", "model_name", "service_tier", "created_at", "last_updated_at", "created_by", "last_updated_by")
     MODEL_DEFINITION_ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     SECRET_ID_FIELD_NUMBER: _ClassVar[int]
     SECRET_NAME_FIELD_NUMBER: _ClassVar[int]
     PROVIDER_FIELD_NUMBER: _ClassVar[int]
     MODEL_NAME_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_TIER_FIELD_NUMBER: _ClassVar[int]
     CREATED_AT_FIELD_NUMBER: _ClassVar[int]
     LAST_UPDATED_AT_FIELD_NUMBER: _ClassVar[int]
     CREATED_BY_FIELD_NUMBER: _ClassVar[int]
@@ -1907,11 +1908,12 @@ class GatewayModelDefinition(_message.Message):
     secret_name: str
     provider: str
     model_name: str
+    service_tier: str
     created_at: int
     last_updated_at: int
     created_by: str
     last_updated_by: str
-    def __init__(self, model_definition_id: _Optional[str] = ..., name: _Optional[str] = ..., secret_id: _Optional[str] = ..., secret_name: _Optional[str] = ..., provider: _Optional[str] = ..., model_name: _Optional[str] = ..., created_at: _Optional[int] = ..., last_updated_at: _Optional[int] = ..., created_by: _Optional[str] = ..., last_updated_by: _Optional[str] = ...) -> None: ...
+    def __init__(self, model_definition_id: _Optional[str] = ..., name: _Optional[str] = ..., secret_id: _Optional[str] = ..., secret_name: _Optional[str] = ..., provider: _Optional[str] = ..., model_name: _Optional[str] = ..., service_tier: _Optional[str] = ..., created_at: _Optional[int] = ..., last_updated_at: _Optional[int] = ..., created_by: _Optional[str] = ..., last_updated_by: _Optional[str] = ...) -> None: ...
 
 class GatewayEndpointModelMapping(_message.Message):
     __slots__ = ("mapping_id", "endpoint_id", "model_definition_id", "model_definition", "weight", "created_at", "created_by", "linkage_type", "fallback_order")
@@ -2089,7 +2091,7 @@ class ListGatewaySecretInfos(_message.Message):
     def __init__(self, provider: _Optional[str] = ...) -> None: ...
 
 class CreateGatewayModelDefinition(_message.Message):
-    __slots__ = ("name", "secret_id", "provider", "model_name", "created_by")
+    __slots__ = ("name", "secret_id", "provider", "model_name", "service_tier", "created_by")
     class Response(_message.Message):
         __slots__ = ("model_definition",)
         MODEL_DEFINITION_FIELD_NUMBER: _ClassVar[int]
@@ -2099,13 +2101,15 @@ class CreateGatewayModelDefinition(_message.Message):
     SECRET_ID_FIELD_NUMBER: _ClassVar[int]
     PROVIDER_FIELD_NUMBER: _ClassVar[int]
     MODEL_NAME_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_TIER_FIELD_NUMBER: _ClassVar[int]
     CREATED_BY_FIELD_NUMBER: _ClassVar[int]
     name: str
     secret_id: str
     provider: str
     model_name: str
+    service_tier: str
     created_by: str
-    def __init__(self, name: _Optional[str] = ..., secret_id: _Optional[str] = ..., provider: _Optional[str] = ..., model_name: _Optional[str] = ..., created_by: _Optional[str] = ...) -> None: ...
+    def __init__(self, name: _Optional[str] = ..., secret_id: _Optional[str] = ..., provider: _Optional[str] = ..., model_name: _Optional[str] = ..., service_tier: _Optional[str] = ..., created_by: _Optional[str] = ...) -> None: ...
 
 class GetGatewayModelDefinition(_message.Message):
     __slots__ = ("model_definition_id",)
@@ -2132,7 +2136,7 @@ class ListGatewayModelDefinitions(_message.Message):
     def __init__(self, provider: _Optional[str] = ..., secret_id: _Optional[str] = ...) -> None: ...
 
 class UpdateGatewayModelDefinition(_message.Message):
-    __slots__ = ("model_definition_id", "name", "secret_id", "model_name", "updated_by", "provider")
+    __slots__ = ("model_definition_id", "name", "secret_id", "model_name", "service_tier", "updated_by", "provider")
     class Response(_message.Message):
         __slots__ = ("model_definition",)
         MODEL_DEFINITION_FIELD_NUMBER: _ClassVar[int]
@@ -2142,15 +2146,17 @@ class UpdateGatewayModelDefinition(_message.Message):
     NAME_FIELD_NUMBER: _ClassVar[int]
     SECRET_ID_FIELD_NUMBER: _ClassVar[int]
     MODEL_NAME_FIELD_NUMBER: _ClassVar[int]
+    SERVICE_TIER_FIELD_NUMBER: _ClassVar[int]
     UPDATED_BY_FIELD_NUMBER: _ClassVar[int]
     PROVIDER_FIELD_NUMBER: _ClassVar[int]
     model_definition_id: str
     name: str
     secret_id: str
     model_name: str
+    service_tier: str
     updated_by: str
     provider: str
-    def __init__(self, model_definition_id: _Optional[str] = ..., name: _Optional[str] = ..., secret_id: _Optional[str] = ..., model_name: _Optional[str] = ..., updated_by: _Optional[str] = ..., provider: _Optional[str] = ...) -> None: ...
+    def __init__(self, model_definition_id: _Optional[str] = ..., name: _Optional[str] = ..., secret_id: _Optional[str] = ..., model_name: _Optional[str] = ..., service_tier: _Optional[str] = ..., updated_by: _Optional[str] = ..., provider: _Optional[str] = ...) -> None: ...
 
 class DeleteGatewayModelDefinition(_message.Message):
     __slots__ = ("model_definition_id",)

@@ -374,6 +374,7 @@ class RestGatewayStoreMixin:
         secret_id: str,
         provider: str,
         model_name: str,
+        service_tier: str | None = None,
         created_by: str | None = None,
     ) -> GatewayModelDefinition:
         """
@@ -384,6 +385,7 @@ class RestGatewayStoreMixin:
             secret_id: ID of the secret containing API credentials.
             provider: Provider name (e.g., "openai", "anthropic").
             model_name: Name of the model (e.g., "gpt-4", "claude-3-5-sonnet").
+            service_tier: Optional provider-specific service tier override.
             created_by: Optional identifier of the user creating the definition.
 
         Returns:
@@ -395,6 +397,7 @@ class RestGatewayStoreMixin:
                 secret_id=secret_id,
                 provider=provider,
                 model_name=model_name,
+                service_tier=service_tier,
                 created_by=created_by,
             )
         )
@@ -444,6 +447,7 @@ class RestGatewayStoreMixin:
         name: str | None = None,
         secret_id: str | None = None,
         model_name: str | None = None,
+        service_tier: str | None = None,
         updated_by: str | None = None,
         provider: str | None = None,
     ) -> GatewayModelDefinition:
@@ -455,6 +459,7 @@ class RestGatewayStoreMixin:
             name: Optional new name.
             secret_id: Optional new secret ID.
             model_name: Optional new model name.
+            service_tier: Optional new provider-specific service tier override.
             updated_by: Optional identifier of the user updating the definition.
             provider: Optional new provider.
 
@@ -467,6 +472,7 @@ class RestGatewayStoreMixin:
                 name=name,
                 secret_id=secret_id,
                 model_name=model_name,
+                service_tier=service_tier,
                 updated_by=updated_by,
                 provider=provider,
             )
