@@ -177,43 +177,7 @@ export function useEditEndpointForm(endpointId: string): UseEditEndpointFormResu
           return secretResponse.secret.secret_id;
         };
 
-        const getOrCreateModelDef = async (model: TrafficSplitModel | FallbackModel): Promise<string> => {
-          // If model has a modelDefinitionId, check if it needs updating
-          if (model.modelDefinitionId) {
-            const originalMapping = endpoint.model_mappings?.find(
-              (m) => m.model_definition?.model_definition_id === model.modelDefinitionId,
-            );
-
-            if (originalMapping?.model_definition) {
-              const hasChanges =
-                model.provider !== originalMapping.model_definition.provider ||
-                model.modelName !== originalMapping.model_definition.model_name ||
-                (isTrafficSplitModel(model) &&
-                  normalizeServiceTier(model.serviceTier) !==
-                    normalizeServiceTier(originalMapping.model_definition.service_tier)) ||
-                (model.secretMode === 'existing' &&
-                  model.existingSecretId !== originalMapping.model_definition.secret_id) ||
-                model.secretMode === 'new';
-
-              if (hasChanges) {
-                // Update the existing model definition
-                const secretId = await getSecretId(model);
-                await updateModelDefinition({
-                  modelDefinitionId: model.modelDefinitionId,
-                  secretId,
-                  provider: model.provider,
-                  modelName: model.modelName,
-                  serviceTier: isTrafficSplitModel(model) ? model.serviceTier || undefined : undefined,
-                });
-              }
-            }
-
-            return model.modelDefinitionId;
-          }
-
-          // Otherwise, create a new model definition
-          const secretId = await getSecretId(model);
-
+        const createModelDef = async (model: TrafficSplitModel | FallbackModel, secretId: string): Promise<string> => {
           if (!model.provider || !model.modelName) {
             throw new Error('Provider and model name are required to create a model definition');
           }
@@ -239,6 +203,56 @@ export function useEditEndpointForm(endpointId: string): UseEditEndpointFormResu
           });
 
           return modelDefResponse.model_definition.model_definition_id;
+        };
+
+        const getOrCreateModelDef = async (model: TrafficSplitModel | FallbackModel): Promise<string> => {
+          // If model has a modelDefinitionId, check if it needs updating
+          if (model.modelDefinitionId) {
+            const originalMapping = endpoint.model_mappings?.find(
+              (m) => m.model_definition?.model_definition_id === model.modelDefinitionId,
+            );
+
+            if (originalMapping?.model_definition) {
+              const hasChanges =
+                model.provider !== originalMapping.model_definition.provider ||
+                model.modelName !== originalMapping.model_definition.model_name ||
+                (isTrafficSplitModel(model) &&
+                  normalizeServiceTier(model.serviceTier) !==
+                    normalizeServiceTier(originalMapping.model_definition.service_tier)) ||
+                (model.secretMode === 'existing' &&
+                  model.existingSecretId !== originalMapping.model_definition.secret_id) ||
+                model.secretMode === 'new';
+
+              if (hasChanges) {
+                const secretId = await getSecretId(model);
+
+                const shouldCreateNewModelDefinition =
+                  isTrafficSplitModel(model) &&
+                  normalizeServiceTier(originalMapping.model_definition.service_tier) !== '' &&
+                  normalizeServiceTier(model.serviceTier) === '';
+
+                if (shouldCreateNewModelDefinition) {
+                  // The backend update contract treats omitted service_tier as "leave unchanged",
+                  // so clearing it must use a new model definition without the field.
+                  return createModelDef(model, secretId);
+                }
+
+                await updateModelDefinition({
+                  modelDefinitionId: model.modelDefinitionId,
+                  secretId,
+                  provider: model.provider,
+                  modelName: model.modelName,
+                  serviceTier: isTrafficSplitModel(model) ? model.serviceTier || undefined : undefined,
+                });
+              }
+            }
+
+            return model.modelDefinitionId;
+          }
+
+          // Otherwise, create a new model definition
+          const secretId = await getSecretId(model);
+          return createModelDef(model, secretId);
         };
 
         const trafficSplitModelDefIds = await Promise.all(values.trafficSplitModels.map((m) => getOrCreateModelDef(m)));

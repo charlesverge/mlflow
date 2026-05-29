@@ -48,6 +48,7 @@ from mlflow.server.fastapi_app import add_gateway_timing_middleware
 from mlflow.server.gateway_api import (
     _build_endpoint_config,
     _create_provider_from_endpoint_name,
+    _set_gateway_telemetry_state,
     anthropic_passthrough_messages,
     chat_completions,
     gateway_router,
@@ -98,6 +99,30 @@ def create_mock_request(
     mock_request.state.username = username
     mock_request.state.user_id = user_id
     return mock_request
+
+
+def _create_bedrock_chat_endpoint(store: SqlAlchemyStore, endpoint_name: str) -> None:
+    secret = store.create_gateway_secret(
+        secret_name=f"{endpoint_name}-bedrock-key",
+        secret_value={"aws_access_key_id": "test", "aws_secret_access_key": "test"},
+        provider="bedrock",
+    )
+    model_def = store.create_gateway_model_definition(
+        name=f"{endpoint_name}-bedrock-model",
+        secret_id=secret.secret_id,
+        provider="bedrock",
+        model_name="anthropic.claude-3-5-sonnet-20240620-v1:0",
+    )
+    store.create_gateway_endpoint(
+        name=endpoint_name,
+        model_configs=[
+            GatewayEndpointModelConfig(
+                model_definition_id=model_def.model_definition_id,
+                linkage_type=GatewayModelLinkageType.PRIMARY,
+                weight=1.0,
+            )
+        ],
+    )
 
 
 def _make_model_config(provider="openai", model_name="gpt-4o"):
@@ -1053,6 +1078,123 @@ async def test_chat_completions_endpoint(store: SqlAlchemyStore):
         assert response.id == "test-id"
         assert response.choices[0].message.content == "Hello from OpenAI!"
         assert mock_provider.chat.called
+
+
+@pytest.mark.parametrize(
+    ("path", "request_body"),
+    [
+        (
+            "/gateway/bedrock-chat-endpoint/mlflow/invocations",
+            {"messages": [{"role": "user", "content": "Hi"}]},
+        ),
+        (
+            "/gateway/mlflow/v1/chat/completions",
+            {"model": "bedrock-chat-endpoint", "messages": [{"role": "user", "content": "Hi"}]},
+        ),
+    ],
+)
+def test_bedrock_chat_responses_omit_service_tier_when_absent(
+    store: SqlAlchemyStore, path: str, request_body: dict[str, Any]
+):
+    _create_bedrock_chat_endpoint(store, "bedrock-chat-endpoint")
+    app = FastAPI()
+    app.include_router(gateway_router)
+
+    mock_response = chat.ResponsePayload(
+        id="bedrock-chat-id",
+        object="chat.completion",
+        created=1234567890,
+        model="anthropic.claude-3-5-sonnet-20240620-v1:0",
+        choices=[
+            chat.Choice(
+                index=0,
+                message=chat.ResponseMessage(role="assistant", content="Hello from Bedrock!"),
+                finish_reason="stop",
+            )
+        ],
+        usage=chat.ChatUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+    )
+    mock_endpoint_config = GatewayEndpointConfig(
+        endpoint_id="bedrock-endpoint-id", endpoint_name="bedrock-chat-endpoint", models=[]
+    )
+
+    with (
+        patch("mlflow.server.gateway_api._get_store", return_value=store),
+        patch("mlflow.server.gateway_api.get_request_workspace", return_value=None),
+        patch("mlflow.server.gateway_api.check_budget_limit"),
+        patch("mlflow.server.gateway_api.load_guardrails", return_value=[]),
+        patch(
+            "mlflow.server.gateway_api._create_provider_from_endpoint_name"
+        ) as mock_create_provider,
+    ):
+        mock_provider = MagicMock()
+        mock_provider.chat = AsyncMock(return_value=mock_response)
+        mock_create_provider.return_value = (mock_provider, mock_endpoint_config)
+
+        response = TestClient(app).post(path, json=request_body)
+
+    assert response.status_code == 200
+    assert response.json()["choices"][0]["message"]["content"] == "Hello from Bedrock!"
+    assert "service_tier" not in response.json()
+
+
+@pytest.mark.parametrize(
+    ("path", "request_body"),
+    [
+        (
+            "/gateway/bedrock-chat-endpoint/mlflow/invocations",
+            {"messages": [{"role": "user", "content": "Hi"}]},
+        ),
+        (
+            "/gateway/mlflow/v1/chat/completions",
+            {"model": "bedrock-chat-endpoint", "messages": [{"role": "user", "content": "Hi"}]},
+        ),
+    ],
+)
+def test_bedrock_chat_responses_include_service_tier_when_present(
+    store: SqlAlchemyStore, path: str, request_body: dict[str, Any]
+):
+    _create_bedrock_chat_endpoint(store, "bedrock-chat-endpoint")
+    app = FastAPI()
+    app.include_router(gateway_router)
+
+    mock_response = chat.ResponsePayload(
+        id="bedrock-chat-id",
+        object="chat.completion",
+        created=1234567890,
+        model="anthropic.claude-3-5-sonnet-20240620-v1:0",
+        choices=[
+            chat.Choice(
+                index=0,
+                message=chat.ResponseMessage(role="assistant", content="Hello from Bedrock!"),
+                finish_reason="stop",
+            )
+        ],
+        usage=chat.ChatUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+        service_tier="priority",
+    )
+    mock_endpoint_config = GatewayEndpointConfig(
+        endpoint_id="bedrock-endpoint-id", endpoint_name="bedrock-chat-endpoint", models=[]
+    )
+
+    with (
+        patch("mlflow.server.gateway_api._get_store", return_value=store),
+        patch("mlflow.server.gateway_api.get_request_workspace", return_value=None),
+        patch("mlflow.server.gateway_api.check_budget_limit"),
+        patch("mlflow.server.gateway_api.load_guardrails", return_value=[]),
+        patch(
+            "mlflow.server.gateway_api._create_provider_from_endpoint_name"
+        ) as mock_create_provider,
+    ):
+        mock_provider = MagicMock()
+        mock_provider.chat = AsyncMock(return_value=mock_response)
+        mock_create_provider.return_value = (mock_provider, mock_endpoint_config)
+
+        response = TestClient(app).post(path, json=request_body)
+
+    assert response.status_code == 200
+    assert response.json()["choices"][0]["message"]["content"] == "Hello from Bedrock!"
+    assert response.json()["service_tier"] == "priority"
 
 
 def test_response_timing_headers(store: SqlAlchemyStore):

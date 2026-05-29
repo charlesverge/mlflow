@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 
-import { fastFillInput, renderWithDesignSystem, screen } from '@mlflow/mlflow/src/common/utils/TestUtils.react18';
+import { describe, expect, it, jest } from '@jest/globals';
+import { renderWithDesignSystem, screen } from '@mlflow/mlflow/src/common/utils/TestUtils.react18';
 import userEvent from '@testing-library/user-event';
 
 import type { TrafficSplitModel } from '../../hooks/useEditEndpointForm';
@@ -20,7 +21,7 @@ jest.mock('../create-endpoint/ModelSelect', () => ({
   ModelSelect: () => <div>Model select</div>,
 }));
 
-jest.mock('../../hooks/useApiKeyConfiguration', () => ({
+jest.mock('../model-configuration/hooks/useApiKeyConfiguration', () => ({
   useApiKeyConfiguration: () => ({
     isLoadingSecrets: false,
     existingSecrets: [],
@@ -67,7 +68,6 @@ const renderComponent = (initialModel: Partial<TrafficSplitModel> = {}) => {
         }}
         onWeightChange={jest.fn()}
         onRemove={jest.fn()}
-        showWeight={false}
         componentId="traffic-split-model"
       />
     );
@@ -79,17 +79,36 @@ const renderComponent = (initialModel: Partial<TrafficSplitModel> = {}) => {
   };
 };
 
+const expandModel = async (user: ReturnType<typeof userEvent.setup>) => {
+  const expandButton = document.querySelector('[data-component-id="traffic-split-model.expand"]');
+
+  if (!(expandButton instanceof HTMLButtonElement)) {
+    throw new Error('Expand button not found');
+  }
+
+  await user.click(expandButton);
+};
+
 describe('TrafficSplitModelItem', () => {
-  it('shows the Bedrock service tier selector for Bedrock models', () => {
+  it('shows the Bedrock service tier selector for Bedrock models', async () => {
+    const user = userEvent.setup();
     renderComponent();
 
+    await expandModel(user);
+
     expect(screen.getByText('Service tier')).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /auto/i })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /custom value/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('combobox', { name: /service tier/i }));
+
+    expect(screen.getByRole('option', { name: /auto/i })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /custom value/i })).toBeInTheDocument();
   });
 
-  it('hides the service tier selector for non-Bedrock providers', () => {
+  it('hides the service tier selector for non-Bedrock providers', async () => {
+    const user = userEvent.setup();
     renderComponent({ provider: 'openai' });
+
+    await expandModel(user);
 
     expect(screen.queryByText('Service tier')).not.toBeInTheDocument();
   });
@@ -98,7 +117,9 @@ describe('TrafficSplitModelItem', () => {
     const user = userEvent.setup();
     const { onModelChange } = renderComponent();
 
-    await user.click(screen.getByRole('radio', { name: /priority/i }));
+    await expandModel(user);
+    await user.click(screen.getByRole('combobox', { name: /service tier/i }));
+    await user.click(screen.getByRole('option', { name: /priority/i }));
 
     expect(onModelChange).toHaveBeenCalledWith(expect.objectContaining({ serviceTier: 'priority' }));
   });
@@ -107,20 +128,32 @@ describe('TrafficSplitModelItem', () => {
     const user = userEvent.setup();
     const { onModelChange } = renderComponent({ serviceTier: 'reserved-tier' });
 
+    await expandModel(user);
+
     const input = screen.getByPlaceholderText('Enter a custom service tier') as HTMLInputElement;
     expect(input.value).toBe('reserved-tier');
 
-    await user.clear(input);
-    await fastFillInput(input, 'enterprise-tier', user);
+    await user.type(input, '-enterprise');
 
-    expect(onModelChange).toHaveBeenCalledWith(expect.objectContaining({ serviceTier: 'enterprise-tier' }));
-    expect(input.value).toBe('enterprise-tier');
+    expect(onModelChange).toHaveBeenCalledWith(expect.objectContaining({ serviceTier: 'reserved-tier-enterprise' }));
+    expect(input.value).toBe('reserved-tier-enterprise');
+  });
+
+  it('resets the service tier when clearing the current selection', async () => {
+    const user = userEvent.setup();
+    const { onModelChange } = renderComponent({ serviceTier: 'priority' });
+
+    await expandModel(user);
+    await user.click(screen.getByRole('button', { name: /clear selection/i }));
+
+    expect(onModelChange).toHaveBeenCalledWith(expect.objectContaining({ serviceTier: '' }));
   });
 
   it('clears the service tier when switching away from Bedrock', async () => {
     const user = userEvent.setup();
     const { onModelChange } = renderComponent({ serviceTier: 'priority' });
 
+    await expandModel(user);
     await user.click(screen.getByRole('button', { name: 'Select OpenAI' }));
 
     expect(onModelChange).toHaveBeenCalledWith(expect.objectContaining({ provider: 'openai', serviceTier: '' }));

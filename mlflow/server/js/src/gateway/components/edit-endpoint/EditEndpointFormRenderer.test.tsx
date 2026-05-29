@@ -4,11 +4,19 @@ import { useForm } from 'react-hook-form';
 import { MemoryRouter } from '../../../common/utils/RoutingUtils';
 import { renderWithDesignSystem, screen } from '../../../common/utils/TestUtils.react18';
 import { EditEndpointFormRenderer } from './EditEndpointFormRenderer';
-import type { EditEndpointFormData } from '../../hooks/useEditEndpointForm';
+import type { EditEndpointFormData, FallbackModel, TrafficSplitModel } from '../../hooks/useEditEndpointForm';
 import type { Endpoint } from '../../types';
 
-jest.mock('./TrafficSplitConfigurator', () => ({ TrafficSplitConfigurator: () => null }));
-jest.mock('./FallbackModelsConfigurator', () => ({ FallbackModelsConfigurator: () => null }));
+jest.mock('./TrafficSplitConfigurator', () => ({
+  TrafficSplitConfigurator: ({ value }: { value: TrafficSplitModel[] }) => (
+    <div>{value.some((model) => model.provider === 'bedrock') ? 'Primary service tier visible' : 'Primary service tier hidden'}</div>
+  ),
+}));
+jest.mock('./FallbackModelsConfigurator', () => ({
+  FallbackModelsConfigurator: ({ value }: { value: FallbackModel[] }) => (
+    <div>{value.some((model) => model.provider === 'bedrock') ? 'Fallback service tier hidden' : 'Fallback models rendered'}</div>
+  ),
+}));
 jest.mock('./StarterCodeCard', () => ({ StarterCodeCard: () => null }));
 jest.mock('./EditableEndpointName', () => ({ EditableEndpointName: () => null }));
 jest.mock('./GatewayUsageSection', () => ({ GatewayUsageSection: () => null }));
@@ -37,12 +45,45 @@ const endpoint: Endpoint = {
   model_mappings: [],
 };
 
-const TestHarness = ({ experimentId, initialEntry }: { experimentId: string; initialEntry: string }) => {
+const makeTrafficSplitModel = (overrides: Partial<TrafficSplitModel> = {}): TrafficSplitModel => ({
+  modelDefinitionName: '',
+  provider: '',
+  modelName: '',
+  serviceTier: '',
+  secretMode: 'existing',
+  existingSecretId: 'secret-1',
+  newSecret: { name: '', authMode: '', secretFields: {}, configFields: {} },
+  weight: 100,
+  ...overrides,
+});
+
+const makeFallbackModel = (overrides: Partial<FallbackModel> = {}): FallbackModel => ({
+  modelDefinitionName: '',
+  provider: '',
+  modelName: '',
+  secretMode: 'existing',
+  existingSecretId: 'secret-2',
+  newSecret: { name: '', authMode: '', secretFields: {}, configFields: {} },
+  fallbackOrder: 1,
+  ...overrides,
+});
+
+const TestHarness = ({
+  experimentId,
+  initialEntry,
+  trafficSplitModels = [],
+  fallbackModels = [],
+}: {
+  experimentId: string;
+  initialEntry: string;
+  trafficSplitModels?: TrafficSplitModel[];
+  fallbackModels?: FallbackModel[];
+}) => {
   const form = useForm<EditEndpointFormData>({
     defaultValues: {
       name: endpoint.name,
-      trafficSplitModels: [],
-      fallbackModels: [],
+      trafficSplitModels,
+      fallbackModels,
       usageTracking: Boolean(experimentId),
       experimentId,
     },
@@ -79,5 +120,31 @@ describe('EditEndpointFormRenderer', () => {
   test('keeps Guardrails tab enabled when requested directly in URL', () => {
     renderWithDesignSystem(<TestHarness experimentId="" initialEntry="/?tab=guardrails" />);
     expect(screen.getByRole('tab', { name: 'Guardrails' })).not.toBeDisabled();
+  });
+
+  test('shows the service tier field only for Bedrock primary models', () => {
+    renderWithDesignSystem(
+      <TestHarness
+        experimentId="exp-1"
+        initialEntry="/?tab=overview"
+        trafficSplitModels={[makeTrafficSplitModel({ provider: 'bedrock', modelName: 'anthropic.claude-3' })]}
+        fallbackModels={[makeFallbackModel({ provider: 'bedrock', modelName: 'anthropic.claude-3' })]}
+      />,
+    );
+
+    expect(screen.getByText('Primary service tier visible')).toBeInTheDocument();
+    expect(screen.getByText('Fallback service tier hidden')).toBeInTheDocument();
+  });
+
+  test('keeps the primary service tier hidden for non-Bedrock models', () => {
+    renderWithDesignSystem(
+      <TestHarness
+        experimentId="exp-1"
+        initialEntry="/?tab=overview"
+        trafficSplitModels={[makeTrafficSplitModel({ provider: 'openai', modelName: 'gpt-4o-mini' })]}
+      />,
+    );
+
+    expect(screen.getByText('Primary service tier hidden')).toBeInTheDocument();
   });
 });

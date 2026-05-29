@@ -3,8 +3,8 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   FormUI,
-  Radio,
-  type RadioChangeEvent,
+  SimpleSelect,
+  SimpleSelectOption,
   Tooltip,
   Typography,
   useDesignSystemTheme,
@@ -87,7 +87,9 @@ export const TrafficSplitModelItem = ({
       return undefined;
     }
 
-    return BEDROCK_SERVICE_TIER_OPTIONS.some(({ value }) => value === model.serviceTier) ? model.serviceTier : 'custom';
+    const matchedServiceTierOption = BEDROCK_SERVICE_TIER_OPTIONS.find(({ value }) => value === model.serviceTier);
+
+    return matchedServiceTierOption?.value ?? 'custom';
   }, [model.serviceTier]);
 
   const handleApiKeyChange = (config: ApiKeyConfiguration) => {
@@ -98,10 +100,25 @@ export const TrafficSplitModelItem = ({
     });
   };
 
-  const handleServiceTierChange = (event: RadioChangeEvent) => {
-    const value = event.target.value as BedrockServiceTierSelection;
+  const selectedServiceTierOption = useMemo(
+    () => BEDROCK_SERVICE_TIER_OPTIONS.find(({ value }) => value === serviceTierSelection),
+    [serviceTierSelection],
+  );
+
+  const customServiceTierDescription = intl.formatMessage({
+    defaultMessage: 'Enter any Bedrock-supported service tier value.',
+    description: 'Description for custom Bedrock service tier option',
+  });
+
+  const handleServiceTierChange = (value: string) => {
+    if (!value) {
+      onModelChange(index, { serviceTier: '' });
+      return;
+    }
+
+    const selection = value as BedrockServiceTierSelection;
     onModelChange(index, {
-      serviceTier: value === 'custom' ? (serviceTierSelection === 'custom' ? model.serviceTier : '') : value,
+      serviceTier: selection === 'custom' ? (serviceTierSelection === 'custom' ? model.serviceTier : '') : selection,
     });
   };
 
@@ -194,7 +211,7 @@ export const TrafficSplitModelItem = ({
                   marginBottom: theme.spacing.sm,
                 }}
               >
-                <FormUI.Label css={{ margin: 0 }}>
+                <FormUI.Label htmlFor={`${domId}.service-tier`} css={{ margin: 0 }}>
                   <FormattedMessage defaultMessage="Service tier" description="Label for Bedrock service tier selector" />
                 </FormUI.Label>
                 {model.serviceTier && (
@@ -212,41 +229,54 @@ export const TrafficSplitModelItem = ({
                 )}
               </div>
 
-              <Radio.Group
+              <SimpleSelect
+                id={`${domId}.service-tier`}
                 componentId={`${componentId}.service-tier`}
-                name={`${domId}.service-tier`}
-                value={serviceTierSelection}
-                onChange={handleServiceTierChange}
+                value={serviceTierSelection ?? ''}
+                onChange={({ target }) => handleServiceTierChange(target.value)}
+                placeholder={intl.formatMessage({
+                  defaultMessage: 'Select an optional service tier',
+                  description: 'Placeholder for Bedrock service tier selector',
+                })}
+                contentProps={{
+                  matchTriggerWidth: true,
+                  maxHeight: 320,
+                }}
+                css={{ width: '100%' }}
               >
-                <div css={{ display: 'flex', flexDirection: 'column', gap: theme.spacing.sm }}>
-                  {BEDROCK_SERVICE_TIER_OPTIONS.map((option) => (
-                    <Radio key={option.value} value={option.value}>
-                      <div>
-                        <div css={{ fontWeight: theme.typography.typographyBoldFontWeight }}>{option.value}</div>
-                        <div css={{ color: theme.colors.textSecondary, fontSize: theme.typography.fontSizeSm }}>
-                          {option.description}
-                        </div>
-                      </div>
-                    </Radio>
-                  ))}
-                  <Radio value="custom">
+                {BEDROCK_SERVICE_TIER_OPTIONS.map((option) => (
+                  <SimpleSelectOption key={option.value} value={option.value}>
                     <div>
-                      <div css={{ fontWeight: theme.typography.typographyBoldFontWeight }}>
-                        <FormattedMessage
-                          defaultMessage="Custom value"
-                          description="Option to enter a custom Bedrock service tier"
-                        />
-                      </div>
+                      <div css={{ fontWeight: theme.typography.typographyBoldFontWeight }}>{option.value}</div>
                       <div css={{ color: theme.colors.textSecondary, fontSize: theme.typography.fontSizeSm }}>
-                        <FormattedMessage
-                          defaultMessage="Enter any Bedrock-supported service tier value."
-                          description="Description for custom Bedrock service tier option"
-                        />
+                        {option.description}
                       </div>
                     </div>
-                  </Radio>
-                </div>
-              </Radio.Group>
+                  </SimpleSelectOption>
+                ))}
+                <SimpleSelectOption value="custom">
+                  <div>
+                    <div css={{ fontWeight: theme.typography.typographyBoldFontWeight }}>
+                      <FormattedMessage
+                        defaultMessage="Custom value"
+                        description="Option to enter a custom Bedrock service tier"
+                      />
+                    </div>
+                    <div css={{ color: theme.colors.textSecondary, fontSize: theme.typography.fontSizeSm }}>
+                      {customServiceTierDescription}
+                    </div>
+                  </div>
+                </SimpleSelectOption>
+              </SimpleSelect>
+
+              {(selectedServiceTierOption || serviceTierSelection === 'custom') && (
+                <Typography.Text
+                  color="secondary"
+                  css={{ display: 'block', marginTop: theme.spacing.sm, fontSize: theme.typography.fontSizeSm }}
+                >
+                  {selectedServiceTierOption?.description ?? customServiceTierDescription}
+                </Typography.Text>
+              )}
 
               {serviceTierSelection === 'custom' && (
                 <div css={{ marginTop: theme.spacing.sm }}>

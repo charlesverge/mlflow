@@ -629,7 +629,11 @@ def _get_guardrails_and_auth(
     return guardrails, extract_auth_headers(headers)
 
 
-@gateway_router.post("/{endpoint_name}/mlflow/invocations", response_model=None)
+@gateway_router.post(
+    "/{endpoint_name}/mlflow/invocations",
+    response_model=chat.ResponsePayload | embeddings.ResponsePayload,
+    response_model_exclude_none=True,
+)
 @translate_http_exception
 @_record_gateway_invocation(GatewayInvocationType.MLFLOW_INVOCATIONS)
 async def invocations(endpoint_name: str, request: Request):
@@ -764,7 +768,11 @@ async def invocations(endpoint_name: str, request: Request):
         )
 
 
-@gateway_router.post("/mlflow/v1/chat/completions", response_model=None)
+@gateway_router.post(
+    "/mlflow/v1/chat/completions",
+    response_model=chat.ResponsePayload,
+    response_model_exclude_none=True,
+)
 @translate_http_exception
 @_record_gateway_invocation(GatewayInvocationType.MLFLOW_CHAT_COMPLETIONS)
 async def chat_completions(request: Request):
