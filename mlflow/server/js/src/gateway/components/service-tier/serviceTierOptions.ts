@@ -26,8 +26,3 @@ export function isPresetServiceTier(value: string): value is ServiceTierOption {
   return SERVICE_TIER_OPTIONS.some((opt) => opt.value === value);
 }
 
-/** Returns the selection state for a given persisted service tier value. */
-export function getServiceTierSelection(value: string): ServiceTierOption | 'custom' | undefined {
-  if (!value) return undefined;
-  return isPresetServiceTier(value) ? value : 'custom';
-}

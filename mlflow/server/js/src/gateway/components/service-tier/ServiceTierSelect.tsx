@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useId, useCallback } from 'react';
 import { Input, useDesignSystemTheme, FormUI } from '@databricks/design-system';
 import { FormattedMessage, useIntl } from 'react-intl';
 import { ServiceTierSelectorModal } from './ServiceTierSelectorModal';
@@ -21,7 +21,8 @@ export const ServiceTierSelect = ({
 }: ServiceTierSelectProps) => {
   const { theme } = useDesignSystemTheme();
   const intl = useIntl();
-  const domId = useRef(`service-tier-select-${Math.random().toString(36).slice(2, 9)}`).current;
+  const id = useId();
+  const domId = `service-tier-select-${id}`;
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const handleClick = useCallback(() => {
@@ -76,10 +77,7 @@ export const ServiceTierSelect = ({
       <ServiceTierSelectorModal
         isOpen={isModalOpen}
         onClose={handleClose}
-        onSelect={(tier) => {
-          handleSelect(tier);
-          setIsModalOpen(false);
-        }}
+        onSelect={handleSelect}
         initialValue={value}
       />
     </div>
