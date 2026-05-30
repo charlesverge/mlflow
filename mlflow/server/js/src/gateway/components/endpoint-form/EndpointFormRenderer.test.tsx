@@ -78,37 +78,47 @@ const TestHarness = ({ initialValues = {} }: { initialValues?: Partial<CreateEnd
 };
 
 describe('EndpointFormRenderer — service tier (create form)', () => {
-  it('does not render the service tier selector when no provider is selected', () => {
+  it('renders a disabled service tier trigger when no provider is selected', () => {
     renderWithDesignSystem(<TestHarness />);
-    expect(screen.queryByText('Service tier')).not.toBeInTheDocument();
+    const input = screen.getByRole('textbox', { name: /service tier/i });
+    expect(input).toBeDisabled();
   });
 
-  it('does not render the service tier selector for non-Bedrock providers', () => {
+  it('renders an enabled service tier trigger for a non-Bedrock provider', () => {
     renderWithDesignSystem(<TestHarness initialValues={{ provider: 'openai', modelName: 'gpt-4o-mini' }} />);
-    expect(screen.queryByText('Service tier')).not.toBeInTheDocument();
+    const input = screen.getByRole('textbox', { name: /service tier/i });
+    expect(input).not.toBeDisabled();
   });
 
-  it('renders the service tier selector when the Bedrock provider is selected', () => {
+  it('renders an enabled service tier trigger when the Bedrock provider is selected', () => {
     renderWithDesignSystem(<TestHarness initialValues={{ provider: 'bedrock', modelName: 'anthropic.claude-3' }} />);
-    expect(screen.getByText('Service tier')).toBeInTheDocument();
+    const input = screen.getByRole('textbox', { name: /service tier/i });
+    expect(input).not.toBeDisabled();
   });
 
-  it('shows all predefined tier options plus "Custom value" in the dropdown', async () => {
+  it('opens the modal when the service tier trigger is clicked', async () => {
     const user = userEvent.setup();
     renderWithDesignSystem(<TestHarness initialValues={{ provider: 'bedrock', modelName: 'anthropic.claude-3' }} />);
 
-    await user.click(screen.getByRole('combobox', { name: /service tier/i }));
+    await user.click(screen.getByRole('textbox', { name: /service tier/i }));
 
-    // SimpleSelect may render each option in both an accessible hidden element and the popup,
-    // so use getAllByRole to handle duplicates for "default" which is a common word.
-    expect(screen.getAllByRole('option', { name: /^auto/i }).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByRole('option', { name: /^default/i }).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByRole('option', { name: /^priority/i }).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByRole('option', { name: /^flex/i }).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByRole('option', { name: /custom value/i }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole('dialog', { name: /select service tier/i })).toBeInTheDocument();
   });
 
-  it('sets the service tier form value when a predefined tier is selected', async () => {
+  it('shows all predefined tier options and a custom input inside the modal', async () => {
+    const user = userEvent.setup();
+    renderWithDesignSystem(<TestHarness initialValues={{ provider: 'bedrock', modelName: 'anthropic.claude-3' }} />);
+
+    await user.click(screen.getByRole('textbox', { name: /service tier/i }));
+
+    expect(screen.getByText('auto')).toBeInTheDocument();
+    expect(screen.getByText('default')).toBeInTheDocument();
+    expect(screen.getByText('priority')).toBeInTheDocument();
+    expect(screen.getByText('flex')).toBeInTheDocument();
+    expect(screen.getByText(/use a custom service tier/i)).toBeInTheDocument();
+  });
+
+  it('sets the service tier form value when a predefined tier is confirmed', async () => {
     const user = userEvent.setup();
     let capturedValues: CreateEndpointFormData | null = null;
 
@@ -137,23 +147,43 @@ describe('EndpointFormRenderer — service tier (create form)', () => {
 
     renderWithDesignSystem(<CapturingHarness />);
 
-    await user.click(screen.getByRole('combobox', { name: /service tier/i }));
-    await user.click(screen.getByRole('option', { name: /priority/i }));
+    await user.click(screen.getByRole('textbox', { name: /service tier/i }));
+    await user.click(screen.getByText('priority'));
+    await user.click(screen.getByRole('button', { name: /^select$/i }));
 
     expect(capturedValues).not.toBeNull();
     expect((capturedValues as unknown as CreateEndpointFormData).serviceTier).toBe('priority');
   });
 
-  it('shows the custom text input when an unrecognised service tier value is pre-set', () => {
-    // serviceTierSelection = 'custom' when the saved value doesn't match any predefined option.
+  it('pre-populates a preset tier when the modal opens with an existing value', async () => {
+    const user = userEvent.setup();
     renderWithDesignSystem(
-      <TestHarness initialValues={{ provider: 'bedrock', modelName: 'anthropic.claude-3', serviceTier: 'reserved-tier' }} />,
+      <TestHarness initialValues={{ provider: 'bedrock', modelName: 'anthropic.claude-3', serviceTier: 'flex' }} />,
     );
 
-    expect(screen.getByPlaceholderText('Enter a custom service tier')).toBeInTheDocument();
+    await user.click(screen.getByRole('textbox', { name: /service tier/i }));
+
+    // Confirm button is enabled because the preset tier was pre-selected
+    expect(screen.getByRole('button', { name: /^select$/i })).not.toBeDisabled();
+    // And "Clear selection" is visible because there is a pre-selection
+    expect(screen.getByRole('button', { name: /clear selection/i })).toBeInTheDocument();
   });
 
-  it('shows the "Clear selection" button when a tier is set and clears it on click', async () => {
+  it('pre-populates the custom input when the modal opens with an unrecognised value', async () => {
+    const user = userEvent.setup();
+    renderWithDesignSystem(
+      <TestHarness
+        initialValues={{ provider: 'bedrock', modelName: 'anthropic.claude-3', serviceTier: 'reserved-tier' }}
+      />,
+    );
+
+    await user.click(screen.getByRole('textbox', { name: /service tier/i }));
+
+    const customInput = screen.getByPlaceholderText(/enter service tier/i);
+    expect((customInput as HTMLInputElement).value).toBe('reserved-tier');
+  });
+
+  it('clears the service tier using the in-modal clear button', async () => {
     const user = userEvent.setup();
     let capturedValues: CreateEndpointFormData | null = null;
 
@@ -182,22 +212,25 @@ describe('EndpointFormRenderer — service tier (create form)', () => {
 
     renderWithDesignSystem(<CapturingHarness />);
 
-    expect(screen.getByRole('button', { name: /clear selection/i })).toBeInTheDocument();
+    await user.click(screen.getByRole('textbox', { name: /service tier/i }));
     await user.click(screen.getByRole('button', { name: /clear selection/i }));
 
     expect((capturedValues as unknown as CreateEndpointFormData).serviceTier).toBe('');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('clears the service tier and hides the selector when switching to a non-Bedrock provider', async () => {
+  it('clears the service tier and keeps the trigger enabled when switching to a non-Bedrock provider', async () => {
     const user = userEvent.setup();
     renderWithDesignSystem(
       <TestHarness initialValues={{ provider: 'bedrock', modelName: 'anthropic.claude-3', serviceTier: 'priority' }} />,
     );
 
-    expect(screen.getByText('Service tier')).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /service tier/i })).not.toBeDisabled();
 
     await user.click(screen.getByRole('button', { name: 'Select OpenAI' }));
 
-    expect(screen.queryByText('Service tier')).not.toBeInTheDocument();
+    // Trigger is still present (all providers show it) and enabled
+    expect(screen.getByRole('textbox', { name: /service tier/i })).not.toBeDisabled();
   });
 });
+

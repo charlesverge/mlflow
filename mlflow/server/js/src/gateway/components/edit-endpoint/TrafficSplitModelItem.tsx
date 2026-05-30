@@ -3,15 +3,13 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   FormUI,
-  SimpleSelect,
-  SimpleSelectOption,
   Tooltip,
   Typography,
   useDesignSystemTheme,
   TrashIcon,
 } from '@databricks/design-system';
 import { FormattedMessage, useIntl } from 'react-intl';
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { GatewayInput } from '../common';
 import type { TrafficSplitModel } from '../../hooks/useEditEndpointForm';
 import { ProviderSelect } from '../create-endpoint/ProviderSelect';
@@ -20,6 +18,7 @@ import { ApiKeyConfigurator } from '../model-configuration/components/ApiKeyConf
 import { useApiKeyConfiguration } from '../model-configuration/hooks/useApiKeyConfiguration';
 import type { ApiKeyConfiguration } from '../model-configuration/types';
 import { formatProviderName } from '../../utils/providerUtils';
+import { ServiceTierSelect } from '../service-tier';
 
 interface TrafficSplitModelItemProps {
   model: TrafficSplitModel;
@@ -29,31 +28,6 @@ interface TrafficSplitModelItemProps {
   onRemove: (index: number) => void;
   componentId: string;
 }
-
-const BEDROCK_SERVICE_TIER_OPTIONS = [
-  {
-    value: 'auto',
-    description:
-      'The default behavior. The system automatically uses specialized tier credits (like Scale Tier) if available.',
-  },
-  {
-    value: 'default',
-    description:
-      'Forces the request to be processed in the standard, shared public cluster using standard pay-as-you-go pricing.',
-  },
-  {
-    value: 'priority',
-    description: 'Routes traffic to Priority Processing for lower latency, billed at a premium rate per token.',
-  },
-  {
-    value: 'flex',
-    description:
-      'Routes traffic to Flex Processing for a significant cost reduction in exchange for higher latency and lower availability.',
-  },
-] as const;
-
-type BedrockServiceTierOption = (typeof BEDROCK_SERVICE_TIER_OPTIONS)[number]['value'];
-type BedrockServiceTierSelection = BedrockServiceTierOption | 'custom';
 
 export const TrafficSplitModelItem = ({
   model,
@@ -82,43 +56,11 @@ export const TrafficSplitModelItem = ({
     newSecret: model.newSecret,
   };
 
-  const serviceTierSelection = useMemo<BedrockServiceTierSelection | undefined>(() => {
-    if (!model.serviceTier) {
-      return undefined;
-    }
-
-    const matchedServiceTierOption = BEDROCK_SERVICE_TIER_OPTIONS.find(({ value }) => value === model.serviceTier);
-
-    return matchedServiceTierOption?.value ?? 'custom';
-  }, [model.serviceTier]);
-
   const handleApiKeyChange = (config: ApiKeyConfiguration) => {
     onModelChange(index, {
       secretMode: config.mode,
       existingSecretId: config.existingSecretId,
       newSecret: config.newSecret,
-    });
-  };
-
-  const selectedServiceTierOption = useMemo(
-    () => BEDROCK_SERVICE_TIER_OPTIONS.find(({ value }) => value === serviceTierSelection),
-    [serviceTierSelection],
-  );
-
-  const customServiceTierDescription = intl.formatMessage({
-    defaultMessage: 'Enter any Bedrock-supported service tier value.',
-    description: 'Description for custom Bedrock service tier option',
-  });
-
-  const handleServiceTierChange = (value: string) => {
-    if (!value) {
-      onModelChange(index, { serviceTier: '' });
-      return;
-    }
-
-    const selection = value as BedrockServiceTierSelection;
-    onModelChange(index, {
-      serviceTier: selection === 'custom' ? (serviceTierSelection === 'custom' ? model.serviceTier : '') : selection,
     });
   };
 
@@ -200,99 +142,12 @@ export const TrafficSplitModelItem = ({
             componentId={`${componentId}.model`}
           />
 
-          {model.provider === 'bedrock' && (
-            <div>
-              <div
-                css={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: theme.spacing.sm,
-                  marginBottom: theme.spacing.sm,
-                }}
-              >
-                <FormUI.Label htmlFor={`${domId}.service-tier`} css={{ margin: 0 }}>
-                  <FormattedMessage defaultMessage="Service tier" description="Label for Bedrock service tier selector" />
-                </FormUI.Label>
-                {model.serviceTier && (
-                  <Button
-                    componentId={`${componentId}.service-tier.clear`}
-                    type="tertiary"
-                    size="small"
-                    onClick={() => onModelChange(index, { serviceTier: '' })}
-                  >
-                    <FormattedMessage
-                      defaultMessage="Clear selection"
-                      description="Button to clear the selected Bedrock service tier"
-                    />
-                  </Button>
-                )}
-              </div>
-
-              <SimpleSelect
-                id={`${domId}.service-tier`}
-                componentId={`${componentId}.service-tier`}
-                value={serviceTierSelection ?? ''}
-                onChange={({ target }) => handleServiceTierChange(target.value)}
-                placeholder={intl.formatMessage({
-                  defaultMessage: 'Select an optional service tier',
-                  description: 'Placeholder for Bedrock service tier selector',
-                })}
-                contentProps={{
-                  matchTriggerWidth: true,
-                  maxHeight: 320,
-                }}
-                css={{ width: '100%' }}
-              >
-                {BEDROCK_SERVICE_TIER_OPTIONS.map((option) => (
-                  <SimpleSelectOption key={option.value} value={option.value}>
-                    <div>
-                      <div css={{ fontWeight: theme.typography.typographyBoldFontWeight }}>{option.value}</div>
-                      <div css={{ color: theme.colors.textSecondary, fontSize: theme.typography.fontSizeSm }}>
-                        {option.description}
-                      </div>
-                    </div>
-                  </SimpleSelectOption>
-                ))}
-                <SimpleSelectOption value="custom">
-                  <div>
-                    <div css={{ fontWeight: theme.typography.typographyBoldFontWeight }}>
-                      <FormattedMessage
-                        defaultMessage="Custom value"
-                        description="Option to enter a custom Bedrock service tier"
-                      />
-                    </div>
-                    <div css={{ color: theme.colors.textSecondary, fontSize: theme.typography.fontSizeSm }}>
-                      {customServiceTierDescription}
-                    </div>
-                  </div>
-                </SimpleSelectOption>
-              </SimpleSelect>
-
-              {(selectedServiceTierOption || serviceTierSelection === 'custom') && (
-                <Typography.Text
-                  color="secondary"
-                  css={{ display: 'block', marginTop: theme.spacing.sm, fontSize: theme.typography.fontSizeSm }}
-                >
-                  {selectedServiceTierOption?.description ?? customServiceTierDescription}
-                </Typography.Text>
-              )}
-
-              {serviceTierSelection === 'custom' && (
-                <div css={{ marginTop: theme.spacing.sm }}>
-                  <GatewayInput
-                    componentId={`${componentId}.service-tier.custom`}
-                    value={model.serviceTier}
-                    onChange={(e) => onModelChange(index, { serviceTier: e.target.value })}
-                    placeholder={intl.formatMessage({
-                      defaultMessage: 'Enter a custom service tier',
-                      description: 'Placeholder for custom Bedrock service tier input',
-                    })}
-                  />
-                </div>
-              )}
-            </div>
-          )}
+          <ServiceTierSelect
+            provider={model.provider}
+            value={model.serviceTier}
+            onChange={(value) => onModelChange(index, { serviceTier: value })}
+            componentId={`${componentId}.service-tier`}
+          />
 
           <ApiKeyConfigurator
             value={apiKeyConfig}

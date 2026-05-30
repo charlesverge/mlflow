@@ -1,10 +1,8 @@
-import { useMemo, useCallback, useRef } from 'react';
+import { useMemo, useCallback } from 'react';
 import {
   Alert,
   Button,
   FormUI,
-  SimpleSelect,
-  SimpleSelectOption,
   Tooltip,
   Typography,
   useDesignSystemTheme,
@@ -14,6 +12,7 @@ import { FormattedMessage, useIntl } from 'react-intl';
 import { Controller, useFormContext } from 'react-hook-form';
 import { ProviderSelect } from '../create-endpoint';
 import { ModelSelect } from '../create-endpoint/ModelSelect';
+import { ServiceTierSelect } from '../service-tier';
 import { UsageTrackingConfigurator } from '../edit-endpoint/UsageTrackingConfigurator';
 import { ApiKeyConfigurator } from '../model-configuration/components/ApiKeyConfigurator';
 import { useApiKeyConfiguration } from '../model-configuration/hooks/useApiKeyConfiguration';
@@ -28,31 +27,6 @@ import type { CreateEndpointFormData } from '../../hooks/useCreateEndpointForm';
 import { CODING_AGENT_LABELS } from '../../hooks/useCreateEndpointForm';
 
 const LONG_FORM_TITLE_WIDTH = 200;
-
-const BEDROCK_SERVICE_TIER_OPTIONS = [
-  {
-    value: 'auto',
-    description:
-      'The default behavior. The system automatically uses specialized tier credits (like Scale Tier) if available.',
-  },
-  {
-    value: 'default',
-    description:
-      'Forces the request to be processed in the standard, shared public cluster using standard pay-as-you-go pricing.',
-  },
-  {
-    value: 'priority',
-    description: 'Routes traffic to Priority Processing for lower latency, billed at a premium rate per token.',
-  },
-  {
-    value: 'flex',
-    description:
-      'Routes traffic to Flex Processing for a significant cost reduction in exchange for higher latency and lower availability.',
-  },
-] as const;
-
-type BedrockServiceTierOption = (typeof BEDROCK_SERVICE_TIER_OPTIONS)[number]['value'];
-type BedrockServiceTierSelection = BedrockServiceTierOption | 'custom';
 
 export type EndpointFormData = CreateEndpointFormData;
 
@@ -116,7 +90,6 @@ export const EndpointFormRenderer = ({
   const { theme } = useDesignSystemTheme();
   const intl = useIntl();
   const form = useFormContext<EndpointFormData>();
-  const serviceTierDomId = useRef(`endpoint-form-service-tier-${Math.random().toString(36).slice(2, 9)}`).current;
 
   const provider = form.watch('provider');
   const modelName = form.watch('modelName');
@@ -124,36 +97,6 @@ export const EndpointFormRenderer = ({
   const existingSecretId = form.watch('existingSecretId');
   const newSecret = form.watch('newSecret');
   const serviceTier = form.watch('serviceTier');
-
-  const serviceTierSelection = useMemo<BedrockServiceTierSelection | undefined>(() => {
-    if (!serviceTier) {
-      return undefined;
-    }
-    const matched = BEDROCK_SERVICE_TIER_OPTIONS.find(({ value }) => value === serviceTier);
-    return matched?.value ?? 'custom';
-  }, [serviceTier]);
-
-  const selectedServiceTierOption = useMemo(
-    () => BEDROCK_SERVICE_TIER_OPTIONS.find(({ value }) => value === serviceTierSelection),
-    [serviceTierSelection],
-  );
-
-  const customServiceTierDescription = intl.formatMessage({
-    defaultMessage: 'Enter any Bedrock-supported service tier value.',
-    description: 'Description for custom Bedrock service tier option',
-  });
-
-  const handleServiceTierChange = (value: string) => {
-    if (!value) {
-      form.setValue('serviceTier', '');
-      return;
-    }
-    const selection = value as BedrockServiceTierSelection;
-    form.setValue(
-      'serviceTier',
-      selection === 'custom' ? (serviceTierSelection === 'custom' ? serviceTier : '') : selection,
-    );
-  };
 
   const { existingSecrets, isLoadingSecrets, authModes, defaultAuthMode, isLoadingProviderConfig } =
     useApiKeyConfiguration({ provider });
@@ -369,99 +312,12 @@ export const EndpointFormRenderer = ({
                   )}
                 />
 
-                {provider === 'bedrock' && (
-                  <div>
-                    <div
-                      css={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: theme.spacing.sm,
-                        marginBottom: theme.spacing.sm,
-                      }}
-                    >
-                      <FormUI.Label htmlFor={serviceTierDomId} css={{ margin: 0 }}>
-                        <FormattedMessage
-                          defaultMessage="Service tier"
-                          description="Label for Bedrock service tier selector"
-                        />
-                      </FormUI.Label>
-                      {serviceTier && (
-                        <Button
-                          componentId={`${componentId}.service-tier.clear`}
-                          type="tertiary"
-                          size="small"
-                          onClick={() => form.setValue('serviceTier', '')}
-                        >
-                          <FormattedMessage
-                            defaultMessage="Clear selection"
-                            description="Button to clear the selected Bedrock service tier"
-                          />
-                        </Button>
-                      )}
-                    </div>
-
-                    <SimpleSelect
-                      id={serviceTierDomId}
-                      componentId={`${componentId}.service-tier`}
-                      value={serviceTierSelection ?? ''}
-                      onChange={({ target }) => handleServiceTierChange(target.value)}
-                      placeholder={intl.formatMessage({
-                        defaultMessage: 'Select an optional service tier',
-                        description: 'Placeholder for Bedrock service tier selector',
-                      })}
-                      contentProps={{ matchTriggerWidth: true, maxHeight: 320 }}
-                      css={{ width: '100%' }}
-                    >
-                      {BEDROCK_SERVICE_TIER_OPTIONS.map((option) => (
-                        <SimpleSelectOption key={option.value} value={option.value}>
-                          <div>
-                            <div css={{ fontWeight: theme.typography.typographyBoldFontWeight }}>{option.value}</div>
-                            <div css={{ color: theme.colors.textSecondary, fontSize: theme.typography.fontSizeSm }}>
-                              {option.description}
-                            </div>
-                          </div>
-                        </SimpleSelectOption>
-                      ))}
-                      <SimpleSelectOption value="custom">
-                        <div>
-                          <div css={{ fontWeight: theme.typography.typographyBoldFontWeight }}>
-                            <FormattedMessage
-                              defaultMessage="Custom value"
-                              description="Option to enter a custom Bedrock service tier"
-                            />
-                          </div>
-                          <div css={{ color: theme.colors.textSecondary, fontSize: theme.typography.fontSizeSm }}>
-                            {customServiceTierDescription}
-                          </div>
-                        </div>
-                      </SimpleSelectOption>
-                    </SimpleSelect>
-
-                    {(selectedServiceTierOption || serviceTierSelection === 'custom') && (
-                      <Typography.Text
-                        color="secondary"
-                        css={{ display: 'block', marginTop: theme.spacing.sm, fontSize: theme.typography.fontSizeSm }}
-                      >
-                        {selectedServiceTierOption?.description ?? customServiceTierDescription}
-                      </Typography.Text>
-                    )}
-
-                    {serviceTierSelection === 'custom' && (
-                      <div css={{ marginTop: theme.spacing.sm }}>
-                        <GatewayInput
-                          componentId={`${componentId}.service-tier.custom`}
-                          value={serviceTier}
-                          onChange={(e) => form.setValue('serviceTier', e.target.value)}
-                          placeholder={intl.formatMessage({
-                            defaultMessage: 'Enter a custom service tier',
-                            description: 'Placeholder for custom Bedrock service tier input',
-                          })}
-                        />
-                      </div>
-                    )}
-                  </div>
-                )}
+                <ServiceTierSelect
+                    provider={provider}
+                    value={serviceTier}
+                    onChange={(value) => form.setValue('serviceTier', value)}
+                    componentId={`${componentId}.service-tier`}
+                  />
 
                 {/* Connections subsection - nested within Model */}
                 {provider && (

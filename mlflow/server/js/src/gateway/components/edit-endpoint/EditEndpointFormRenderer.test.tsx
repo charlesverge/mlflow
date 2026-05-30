@@ -9,12 +9,12 @@ import type { Endpoint } from '../../types';
 
 jest.mock('./TrafficSplitConfigurator', () => ({
   TrafficSplitConfigurator: ({ value }: { value: TrafficSplitModel[] }) => (
-    <div>{value.some((model) => model.provider === 'bedrock') ? 'Primary service tier visible' : 'Primary service tier hidden'}</div>
+    <div>{value.some((model) => model.provider) ? 'Primary service tier visible' : 'Primary service tier hidden'}</div>
   ),
 }));
 jest.mock('./FallbackModelsConfigurator', () => ({
   FallbackModelsConfigurator: ({ value }: { value: FallbackModel[] }) => (
-    <div>{value.some((model) => model.provider === 'bedrock') ? 'Fallback service tier hidden' : 'Fallback models rendered'}</div>
+    <div>{value.some((model) => model.provider) ? 'Fallback service tier visible' : 'Fallback models rendered'}</div>
   ),
 }));
 jest.mock('./StarterCodeCard', () => ({ StarterCodeCard: () => null }));
@@ -122,26 +122,26 @@ describe('EditEndpointFormRenderer', () => {
     expect(screen.getByRole('tab', { name: 'Guardrails' })).not.toBeDisabled();
   });
 
-  test('shows the service tier field only for Bedrock primary models', () => {
-    renderWithDesignSystem(
-      <TestHarness
-        experimentId="exp-1"
-        initialEntry="/?tab=overview"
-        trafficSplitModels={[makeTrafficSplitModel({ provider: 'bedrock', modelName: 'anthropic.claude-3' })]}
-        fallbackModels={[makeFallbackModel({ provider: 'bedrock', modelName: 'anthropic.claude-3' })]}
-      />,
-    );
-
-    expect(screen.getByText('Primary service tier visible')).toBeInTheDocument();
-    expect(screen.getByText('Fallback service tier hidden')).toBeInTheDocument();
-  });
-
-  test('keeps the primary service tier hidden for non-Bedrock models', () => {
+  test('shows the service tier field for any provider in primary models', () => {
     renderWithDesignSystem(
       <TestHarness
         experimentId="exp-1"
         initialEntry="/?tab=overview"
         trafficSplitModels={[makeTrafficSplitModel({ provider: 'openai', modelName: 'gpt-4o-mini' })]}
+        fallbackModels={[makeFallbackModel({ provider: 'openai', modelName: 'gpt-4o-mini' })]}
+      />,
+    );
+
+    expect(screen.getByText('Primary service tier visible')).toBeInTheDocument();
+    expect(screen.getByText('Fallback service tier visible')).toBeInTheDocument();
+  });
+
+  test('keeps the primary service tier hidden when no provider is set', () => {
+    renderWithDesignSystem(
+      <TestHarness
+        experimentId="exp-1"
+        initialEntry="/?tab=overview"
+        trafficSplitModels={[makeTrafficSplitModel({ provider: '', modelName: '' })]}
       />,
     );
 
