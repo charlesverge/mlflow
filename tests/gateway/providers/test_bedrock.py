@@ -906,7 +906,7 @@ async def test_bedrock_converse_request_uses_service_tier():
     response_payload = {
         "output": {"message": {"content": [{"text": "hi"}]}},
         "usage": {"inputTokens": 1, "outputTokens": 1, "totalTokens": 2},
-        "serviceTier": "priority",
+        "serviceTier": {"type": "priority"},
     }
 
     with mock.patch.object(provider, "get_bedrock_client") as get_client:
@@ -914,7 +914,7 @@ async def test_bedrock_converse_request_uses_service_tier():
         response = await provider.chat(payload)
 
     kwargs = get_client.return_value.converse.call_args.kwargs
-    assert kwargs["serviceTier"] == "priority"
+    assert kwargs["serviceTier"] == {"type": "priority"}
     assert response.service_tier == "priority"
 
 
@@ -937,7 +937,7 @@ async def test_bedrock_converse_request_accepts_request_time_service_tier(
         await provider.chat(payload)
 
     kwargs = get_client.return_value.converse.call_args.kwargs
-    assert kwargs["serviceTier"] == "optimized"
+    assert kwargs["serviceTier"] == {"type": "optimized"}
 
 
 @pytest.mark.asyncio
@@ -956,7 +956,7 @@ async def test_bedrock_converse_configured_service_tier_takes_precedence_over_re
         await provider.chat(payload)
 
     kwargs = get_client.return_value.converse.call_args.kwargs
-    assert kwargs["serviceTier"] == "priority"
+    assert kwargs["serviceTier"] == {"type": "priority"}
 
 
 @pytest.mark.asyncio
@@ -965,7 +965,7 @@ async def test_bedrock_converse_stream_request_carries_service_tier():
     payload = chat.RequestPayload.model_validate(
         {
             "messages": [{"role": "user", "content": "hello"}],
-            "serviceTier": "optimized",
+            "serviceTier": "flex",
         }
     )
     mock_client = mock.Mock()
@@ -975,7 +975,7 @@ async def test_bedrock_converse_stream_request_carries_service_tier():
         [jsonable_encoder(chunk) async for chunk in provider.chat_stream(payload)]
 
     kwargs = mock_client.converse_stream.call_args.kwargs
-    assert kwargs["serviceTier"] == "optimized"
+    assert kwargs["serviceTier"] == {"type": "flex"}
 
 
 @pytest.mark.asyncio
@@ -987,12 +987,33 @@ async def test_bedrock_converse_accepts_custom_service_tier_values():
             "serviceTier": "reserved-tier",
         }
     )
-    response_payload = _converse_response() | {"serviceTier": "reserved-tier"}
+    response_payload = _converse_response() | {"serviceTier": {"type": "reserved-tier"}}
 
     with mock.patch.object(provider, "get_bedrock_client") as get_client:
         get_client.return_value.converse.return_value = response_payload
         response = await provider.chat(payload)
 
     kwargs = get_client.return_value.converse.call_args.kwargs
-    assert kwargs["serviceTier"] == "reserved-tier"
+    assert kwargs["serviceTier"] == {"type": "reserved-tier"}
     assert response.service_tier == "reserved-tier"
+
+
+@pytest.mark.asyncio
+async def test_bedrock_converse_request_serializes_flex_service_tier_for_botocore():
+    provider = _make_bedrock_provider()
+    payload = chat.RequestPayload.model_validate(
+        {
+            "messages": [{"role": "user", "content": "hello"}],
+            "max_tokens": 64,
+            "serviceTier": "flex",
+        }
+    )
+    response_payload = _converse_response() | {"serviceTier": {"type": "flex"}}
+
+    with mock.patch.object(provider, "get_bedrock_client") as get_client:
+        get_client.return_value.converse.return_value = response_payload
+        response = await provider.chat(payload)
+
+    kwargs = get_client.return_value.converse.call_args.kwargs
+    assert kwargs["serviceTier"] == {"type": "flex"}
+    assert response.service_tier == "flex"

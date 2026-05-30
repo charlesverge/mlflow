@@ -336,6 +336,28 @@ class AmazonBedrockProvider(BaseProvider):
         request_service_tier = self._extract_request_service_tier(payload)
         return configured_service_tier or request_service_tier
 
+    @staticmethod
+    def _serialize_converse_service_tier(service_tier: str) -> dict[str, str]:
+        return {"type": service_tier}
+
+    @staticmethod
+    def _parse_converse_service_tier(value: Any) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            return value
+        if isinstance(value, dict):
+            service_tier_type = value.get("type")
+            if service_tier_type is None:
+                return None
+            return AmazonBedrockProvider._validate_service_tier(
+                service_tier_type, "Bedrock converse response"
+            )
+        raise AIGatewayException(
+            status_code=422,
+            detail="Invalid Bedrock converse response: 'serviceTier' must be a string or object.",
+        )
+
     # ---- Converse API helpers ----
 
     def _build_converse_kwargs(
@@ -435,7 +457,7 @@ class AmazonBedrockProvider(BaseProvider):
         if system_prompts:
             kwargs["system"] = system_prompts
         if service_tier is not None:
-            kwargs["serviceTier"] = service_tier
+            kwargs["serviceTier"] = self._serialize_converse_service_tier(service_tier)
 
         # Build inferenceConfig from OpenAI params
         inference_config = {}
@@ -530,7 +552,7 @@ class AmazonBedrockProvider(BaseProvider):
                 completion_tokens=usage.get("outputTokens"),
                 total_tokens=usage.get("totalTokens"),
             ),
-            service_tier=response.get("serviceTier"),
+            service_tier=self._parse_converse_service_tier(response.get("serviceTier")),
         )
 
     # ---- API methods ----
