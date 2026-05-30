@@ -37,6 +37,7 @@ export interface CreateEndpointFormData {
   name: string;
   provider: string;
   modelName: string;
+  serviceTier: string;
   secretMode: SecretMode;
   existingSecretId: string;
   newSecret: {
@@ -93,6 +94,7 @@ export function useCreateEndpointForm({
       name: defaultName ?? agentConfig?.endpointName ?? '',
       provider: defaultProvider ?? agentConfig?.provider ?? '',
       modelName: defaultModel ?? agentConfig?.model ?? '',
+      serviceTier: '',
       secretMode: 'new',
       existingSecretId: '',
       newSecret: {
@@ -181,6 +183,7 @@ export function useCreateEndpointForm({
         secret_id: secretId,
         provider: values.provider,
         model_name: values.modelName,
+        service_tier: values.serviceTier || undefined,
       });
 
       const modelDefinitionId = modelDefinitionResponse.model_definition.model_definition_id;
@@ -253,6 +256,7 @@ export function useCreateEndpointForm({
     }
 
     form.setValue('modelName', '');
+    form.setValue('serviceTier', '');
     form.setValue('secretMode', 'new');
     form.setValue('existingSecretId', '');
     form.setValue('newSecret', {
